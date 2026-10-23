@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Logo.Client/Logo.Client.fsproj" />
+    <Project Path="src/Logo.Core/Logo.Core.fsproj" />
+    <Project Path="src/Logo.Server/Logo.Server.fsproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Logo.Core.Tests/Logo.Core.Tests.fsproj" />
+  </Folder>
+</Solution>

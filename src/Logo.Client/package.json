@@ -1,0 +1,31 @@
+{
+  "name": "logo-client",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "fable": "dotnet fable . --outDir build",
+    "fable:watch": "dotnet fable watch . --outDir build",
+    "vite": "vite",
+    "dev": "dotnet fable watch . --outDir build --run vite",
+    "build": "dotnet fable . --outDir build && vite build"
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "^6.20.4",
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/language": "^6.13.1",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.15",
+    "@lezer/highlight": "^1.2.5",
+    "codemirror": "^6.0.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "y-codemirror.next": "^0.3.6",
+    "y-indexeddb": "^9.0.12",
+    "y-websocket": "^3.1.0",
+    "yjs": "^13.6.33"
+  },
+  "devDependencies": {
+    "vite": "^8.3.5"
+  }
+}

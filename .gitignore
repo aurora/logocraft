@@ -1,0 +1,12 @@
+bin/
+obj/
+node_modules/
+
+# Fable-Ausgabe und gebautes Frontend
+src/Logo.Client/build/
+src/Logo.Server/wwwroot/
+
+# lokale Artefakte
+server.log
+tests/e2e/screenshot.png
+.vs/

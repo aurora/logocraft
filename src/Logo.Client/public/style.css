@@ -1,0 +1,89 @@
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; margin: 0; }
+
+body {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: #0f172a;
+  background: #f1f5f9;
+}
+
+.app { display: flex; flex-direction: column; height: 100%; }
+
+/* ---------- Kopfzeile ---------- */
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 14px;
+  background: #0f172a;
+  color: #e2e8f0;
+  flex-wrap: wrap;
+}
+
+.brand { display: flex; align-items: center; gap: 12px; }
+.logo { font-weight: 700; font-size: 18px; letter-spacing: .5px; }
+.room { font-size: 13px; color: #94a3b8; }
+
+.status { font-size: 12px; padding: 2px 8px; border-radius: 999px; }
+.status.ok { background: #14532d; color: #bbf7d0; }
+.status.wait { background: #713f12; color: #fde68a; }
+.status.bad { background: #7f1d1d; color: #fecaca; }
+
+.peers { display: flex; gap: 8px; flex-wrap: wrap; flex: 1; min-width: 120px; }
+.peer {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; padding: 2px 10px 2px 6px;
+  background: #1e293b; border-radius: 999px;
+}
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+.controls { display: flex; align-items: center; gap: 14px; font-size: 13px; }
+.controls label { display: inline-flex; align-items: center; gap: 2px; cursor: pointer; user-select: none; }
+.controls select, .room-tools select {
+  background: #1e293b; color: #e2e8f0; border: 1px solid #334155;
+  border-radius: 6px; padding: 5px 8px; font-size: 13px;
+}
+
+.room-tools { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.room-tools select { max-width: 200px; }
+button.tool {
+  background: #1e293b; color: #e2e8f0; border: 1px solid #334155;
+  border-radius: 6px; padding: 5px 10px; font-size: 13px; cursor: pointer;
+}
+button.tool:hover { background: #334155; }
+
+button.run {
+  background: #16a34a; color: white; border: 0; border-radius: 6px;
+  padding: 6px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+button.run:hover { background: #15803d; }
+
+/* ---------- Aufteilung ---------- */
+
+.split { display: flex; flex: 1; min-height: 0; }
+.pane { min-width: 0; min-height: 0; }
+.editor-pane { flex: 1 1 50%; border-right: 1px solid #cbd5e1; background: #fff; }
+.output-pane { flex: 1 1 50%; display: flex; flex-direction: column; background: #fff; }
+
+.editor-host { height: 100%; }
+.editor-host .cm-editor { height: 100%; }
+
+/* ---------- Ausgabe ---------- */
+
+.canvas { flex: 1; min-height: 0; width: 100%; background: #fff; }
+
+.console {
+  max-height: 30%; overflow: auto; padding: 8px 14px;
+  background: #0f172a; color: #e2e8f0;
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; font-size: 13px;
+}
+.console-stats { color: #64748b; font-size: 12px; margin-bottom: 4px; }
+.console-out { white-space: pre-wrap; }
+.console-err { color: #fca5a5; margin-top: 4px; white-space: pre-wrap; }
+
+@media (max-width: 800px) {
+  .split { flex-direction: column; }
+  .editor-pane { border-right: 0; border-bottom: 1px solid #cbd5e1; }
+}

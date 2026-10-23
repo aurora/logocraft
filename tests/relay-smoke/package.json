@@ -1,0 +1,13 @@
+{
+  "name": "relay-smoke",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node smoke.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.22.0",
+    "y-websocket": "^3.1.0",
+    "yjs": "^13.6.33"
+  }
+}

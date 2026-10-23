@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Interop.fs" />
+    <Compile Include="Rooms.fs" />
+    <Compile Include="Examples.fs" />
+    <Compile Include="App.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Logo.Core\Logo.Core.fsproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Fable.Core" Version="5.5.0" />
+    <PackageReference Include="Fable.Elmish" Version="5.0.2" />
+    <PackageReference Include="Fable.Elmish.React" Version="5.6.0" />
+    <PackageReference Include="Feliz" Version="3.3.3" />
+  </ItemGroup>
+
+</Project>

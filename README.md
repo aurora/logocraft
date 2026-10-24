@@ -12,6 +12,10 @@ There is no database and no user management: each browser stores its rooms local
 
 - **LogoCraft Studio UI** — dark IDE workspace with sidebar, editor tabs, telemetry HUD,
   canvas zoom, turtle/grid toggles and a room settings panel.
+- **Animated drawing** — reveal the drawing segment by segment while the turtle moves along the
+  paths. Toggle *Animate* in the canvas toolbar or replay the current drawing with the play
+  button; the playback speed is adjustable from 0.25× to 4×. Animation and live run are
+  mutually exclusive.
 - **Shared code and notes** — two `Y.Text`s in the same Yjs document. The *Notes & Docs*
   tab is a collaborative Markdown pad, edited with CodeMirror as well.
 - **Stateful REPL** — commands run against the current turtle, variables and procedures and
@@ -75,6 +79,9 @@ flowchart LR
 - **REPL**: `Logo.Core.Session` keeps one interpreter machine alive. `Exec` runs a command
   and returns the full drawing plus only the new output; `Run` resets the machine and
   executes a complete program. REPL commands are local to the browser and are not shared.
+- **Animated drawing** is computed in `View.fs` from the finished path list: partial
+  polylines are rendered for the first *n* segments and the turtle position/heading is
+  interpolated along the current segment. No interpreter changes are needed.
 - **Inviting**: *Copy link* copies the room URL; *Join room* accepts a room ID or a full
   invite link. *New room* creates a room, *Project Files* switches rooms, and *Forget*
   removes the local copy only.

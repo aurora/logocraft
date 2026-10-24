@@ -51,6 +51,14 @@ type Drawing =
       Turtle: TurtleState
       Steps: int }
 
+/// Playback state for the animated drawing mode.
+type Animation =
+    { Progress: float
+      Total: float
+      Playing: bool
+      /// Increments on every start so stale timer ticks are ignored
+      Id: int }
+
 type Model =
     { /// Shared room name (?room=… in the URL)
       Room: string
@@ -73,6 +81,11 @@ type Model =
       Status: Status
       Peers: Peer list
       AutoRun: bool
+      /// Reveal the drawing segment by segment when a program runs
+      Animate: bool
+      Animation: Animation
+      /// Playback speed in percent (25 = 0.25×, 100 = 1×, 400 = 4×)
+      AnimSpeed: int
       Fit: bool
       Zoom: int
       ShowTurtle: bool
@@ -91,6 +104,10 @@ type Msg =
     | CodeChanged of string
     | Run
     | ToggleAutoRun
+    | ToggleAnimate
+    | StartAnimation
+    | AnimTick of int
+    | SetAnimSpeed of int
     | ToggleFit
     | ToggleTurtle
     | ToggleGrid
@@ -204,6 +221,49 @@ let segmentsOf (drawing: Drawing) =
 let statsText (drawing: Drawing) =
     $"paths: {drawing.Paths.Length} · segments: {segmentsOf drawing} · steps: {drawing.Steps}"
 
+// ---------------------------------------------------------------------------
+// Animated drawing
+// ---------------------------------------------------------------------------
+
+let private animTickMs = 40
+
+/// Adaptive duration: small drawings don't crawl, huge drawings stay under 4 s.
+let private animationDuration total =
+    min 4000.0 (600.0 + total * 6.0)
+
+let private animationStep total speed =
+    if total <= 0.0 then
+        0.0
+    else
+        let duration = animationDuration total * 100.0 / float (max 25 speed)
+        total * float animTickMs / duration
+
+let private completedAnimation (model: Model) =
+    let total = float (segmentsOf model.Drawing)
+    { model.Animation with Progress = total; Total = total; Playing = false }
+
+let private stopAnimation (model: Model) =
+    { model with Animation = completedAnimation model }
+
+let private animationCommand (model: Model) =
+    if model.Animation.Playing then
+        Cmd.OfAsync.perform
+            (fun () -> Async.Sleep animTickMs)
+            ()
+            (fun () -> AnimTick model.Animation.Id)
+    else
+        Cmd.none
+
+let private beginAnimation (model: Model) : Model * Cmd<Msg> =
+    let total = float (segmentsOf model.Drawing)
+    let animation =
+        { Progress = 0.0
+          Total = total
+          Playing = total > 0.0
+          Id = model.Animation.Id + 1 }
+    let m = { model with Animation = animation }
+    m, animationCommand m
+
 let private emptyResult (model: Model) =
     model.Session.Run ""
 
@@ -235,6 +295,9 @@ let init () : Model * Cmd<Msg> =
       Status = Connecting
       Peers = []
       AutoRun = true
+      Animate = false
+      Animation = { Progress = 0.0; Total = 0.0; Playing = false; Id = 0 }
+      AnimSpeed = 100
       Fit = false
       Zoom = 100
       ShowTurtle = true
@@ -252,10 +315,13 @@ let init () : Model * Cmd<Msg> =
 
 let private execute (code: string) (model: Model) : Model =
     let result = model.Session.Run code
+    let drawing = drawingOf result
+    let total = float (segmentsOf drawing)
     { model with
         Code = code
         Result = result
-        Drawing = drawingOf result
+        Drawing = drawing
+        Animation = { model.Animation with Progress = total; Total = total; Playing = false }
         SessionCode = code
         RunId = model.RunId + 1 }
 
@@ -273,11 +339,44 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         (if model.AutoRun then execute code model else { model with Code = code }), Cmd.none
     | Run ->
         let m = execute model.Code model
-        m |> addLog System $"Program executed · {statsText m.Drawing}", Cmd.none
+        let m, cmd =
+            if m.Animate then beginAnimation m
+            else m, Cmd.none
+        (m |> addLog System $"Program executed · {statsText m.Drawing}"), cmd
     | ToggleAutoRun ->
-        let next = { model with AutoRun = not model.AutoRun }
-        let m = if next.AutoRun then execute next.Code next else next
-        m |> addLog System (if m.AutoRun then "Live run enabled." else "Live run disabled."), Cmd.none
+        let enabling = not model.AutoRun
+        let next =
+            { model with
+                AutoRun = enabling
+                Animate = if enabling then false else model.Animate }
+        let m =
+            if enabling then execute next.Code next
+            else stopAnimation next
+        (m |> addLog System (if enabling then "Live run enabled." else "Live run disabled.")), Cmd.none
+    | ToggleAnimate ->
+        let enabling = not model.Animate
+        let next =
+            { model with
+                Animate = enabling
+                AutoRun = if enabling then false else model.AutoRun }
+        if enabling then
+            let m, cmd = beginAnimation next
+            (m |> addLog System "Animated drawing enabled."), cmd
+        else
+            (stopAnimation next |> addLog System "Animated drawing disabled."), Cmd.none
+    | StartAnimation -> beginAnimation model
+    | AnimTick id ->
+        if not model.Animation.Playing || id <> model.Animation.Id then
+            model, Cmd.none
+        else
+            let total = model.Animation.Total
+            let progress = min total (model.Animation.Progress + animationStep total model.AnimSpeed)
+            let playing = progress < total
+            let m =
+                { model with
+                    Animation = { model.Animation with Progress = progress; Playing = playing } }
+            m, animationCommand m
+    | SetAnimSpeed speed -> { model with AnimSpeed = max 25 (min 400 speed) }, Cmd.none
     | ToggleFit -> { model with Fit = not model.Fit }, Cmd.none
     | ToggleTurtle -> { model with ShowTurtle = not model.ShowTurtle }, Cmd.none
     | ToggleGrid -> { model with ShowGrid = not model.ShowGrid }, Cmd.none
@@ -342,6 +441,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             { model with
                 Result = result
                 Drawing = drawingOf result
+                Animation = { model.Animation with Progress = 0.0; Total = 0.0; Playing = false }
                 SessionCode = ""
                 RunId = model.RunId + 1 }
         m |> addLog System "Canvas cleared.", Cmd.none
@@ -381,7 +481,13 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 @ outputEntries
                 @ errorEntries
                 @ [ entry System $"Exec · {statsText drawing}" ]
-            ({ baseModel with Drawing = drawing }
+            ({ baseModel with
+                Drawing = drawing
+                Animation =
+                    { baseModel.Animation with
+                        Progress = float (segmentsOf drawing)
+                        Total = float (segmentsOf drawing)
+                        Playing = false } }
              |> addLogs entries), Cmd.none
     | OpenPanel panel ->
         { model with Panel = panel; FileMenuOpen = false; ExportMenuOpen = false; SidebarOpen = false }, Cmd.none

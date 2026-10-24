@@ -23,6 +23,13 @@ let private attr (name: string) (value: obj) : ISvgAttribute = svg.custom (name,
 
 let private num (v: float) = (Math.Round(v, 2)).ToString()
 
+/// Formats the playback speed (stored in percent) as e.g. "0.5×", "1.0×", "2.5×".
+let private speedLabel (speed: int) =
+    let whole = speed / 100
+    let tenths = (speed % 100) / 10
+    let hundredths = speed % 10
+    string whole + "." + string tenths + (if hundredths = 0 then "" else string hundredths) + "×"
+
 /// The interpreter's default ink is almost black; use the theme foreground on the dark canvas.
 let private ink (color: string) =
     if color.ToLowerInvariant() = "#111827" then "#dae2fd" else color
@@ -100,9 +107,86 @@ let private viewBoxOf (model: Model) =
     let cy = vy + vh / 2.0
     (cx - w / 2.0, cy - h / 2.0, w, h)
 
+/// Reveals only the first `progress` segments (fractions included) of the drawing.
+let private partialPaths (paths: Path[]) (progress: float) =
+    if progress <= 0.0 then
+        [||]
+    else
+        let result = ResizeArray<Path>()
+        let mutable remaining = progress
+        for path in paths do
+            if remaining > 0.0 && path.Points.Length > 1 then
+                let segments = path.Points.Length - 1
+                if remaining >= float segments then
+                    result.Add path
+                    remaining <- remaining - float segments
+                else
+                    let whole = int (Math.Floor remaining)
+                    let fraction = remaining - float whole
+                    let count = whole + 1
+                    let points = Array.sub path.Points 0 count
+                    let points =
+                        if fraction > 0.0 && count < path.Points.Length then
+                            let (x0, y0, z0) = path.Points.[whole]
+                            let (x1, y1, z1) = path.Points.[whole + 1]
+                            Array.append
+                                points
+                                [| (x0 + (x1 - x0) * fraction,
+                                    y0 + (y1 - y0) * fraction,
+                                    z0 + (z1 - z0) * fraction) |]
+                        else
+                            points
+                    result.Add { path with Points = points }
+                    remaining <- 0.0
+        result.ToArray()
+
+/// Position and heading of the turtle at `progress` segments into the drawing.
+let private animatedTurtle (drawing: Drawing) (progress: float) =
+    let total = float (segmentsOf drawing)
+    if progress >= total then
+        drawing.Turtle
+    else
+        let mutable remaining = max 0.0 progress
+        let mutable found: TurtleState option = None
+        for path in drawing.Paths do
+            if found.IsNone && path.Points.Length > 1 then
+                let segments = path.Points.Length - 1
+                if remaining >= float segments then
+                    remaining <- remaining - float segments
+                else
+                    let whole = int (Math.Floor remaining)
+                    let fraction = remaining - float whole
+                    let (x0, y0, z0) = path.Points.[whole]
+                    let (x1, y1, z1) = path.Points.[whole + 1]
+                    let px = x0 + (x1 - x0) * fraction
+                    let py = y0 + (y1 - y0) * fraction
+                    let pz = z0 + (z1 - z0) * fraction
+                    let heading = Math.Atan2(x1 - x0, -(y1 - y0)) * 180.0 / Math.PI
+                    let heading = (heading + 360.0) % 360.0
+                    found <-
+                        Some
+                            { drawing.Turtle with
+                                X = px
+                                Y = py
+                                Z = pz
+                                Heading = heading
+                                Pitch = 0.0
+                                PenDown = true }
+        match found with
+        | Some turtle -> turtle
+        | None -> drawing.Turtle
+
+let private turtleNow (model: Model) =
+    if model.Animation.Playing then animatedTurtle model.Drawing model.Animation.Progress
+    else model.Drawing.Turtle
+
+let private pathsNow (model: Model) =
+    if model.Animation.Playing then partialPaths model.Drawing.Paths model.Animation.Progress
+    else model.Drawing.Paths
+
 let private canvas (model: Model) =
     let (vx, vy, vw, vh) = viewBoxOf model
-    let t = model.Drawing.Turtle
+    let t = turtleNow model
 
     let axis (x1, y1, x2, y2) =
         Svg.line [
@@ -164,7 +248,7 @@ let private canvas (model: Model) =
             Svg.g [
                 svg.className "turtle-paths"
                 svg.children [
-                    for p in model.Drawing.Paths do
+                    for p in pathsNow model do
                         Svg.polyline [
                             svg.points (pointsAttr p.Points)
                             svg.fill "none"
@@ -777,7 +861,7 @@ let private telemetryItem (label: string) (value: string) (cls: string) =
     ]
 
 let private telemetry (model: Model) =
-    let t = model.Drawing.Turtle
+    let t = turtleNow model
     Html.div [
         prop.className "hud telemetry"
         prop.children [
@@ -846,6 +930,23 @@ let private canvasTools (model: Model) (dispatch: Msg -> unit) =
                 prop.children [ icon "grid_on"; Html.span [ prop.text "Grid" ] ]
             ]
             Html.div [ prop.className "tool-sep" ]
+            Html.button [
+                prop.className ("ghost-btn tiny" + (if model.Animate then " active" else ""))
+                prop.type'.button
+                prop.title "Animate drawing (turns off live run)"
+                prop.custom ("data-testid", "animate-toggle")
+                prop.onClick (fun _ -> dispatch ToggleAnimate)
+                prop.children [ icon "animation"; Html.span [ prop.text "Animate" ] ]
+            ]
+            Html.button [
+                prop.className "icon-btn tiny"
+                prop.type'.button
+                prop.title "Replay drawing"
+                prop.custom ("data-testid", "animate-replay")
+                prop.onClick (fun _ -> dispatch StartAnimation)
+                prop.children [ icon "play_circle" ]
+            ]
+            Html.div [ prop.className "tool-sep" ]
             btn "icon-btn tiny" "Export SVG" "export-svg-2" ExportSvg dispatch "shape_line" ""
             btn "icon-btn tiny" "Export PNG" "export-png" ExportPng dispatch "photo_camera" ""
         ]
@@ -870,8 +971,48 @@ let private liveDelay (model: Model) (dispatch: Msg -> unit) =
                     | _ -> ())
             ]
             Html.span [ prop.className "hud-value"; prop.text $"{model.LiveDelayMs} ms" ]
+            Html.div [ prop.className "hud-sep" ]
+            icon "animation"
+            Html.span [ prop.className "hud-label"; prop.text "Anim speed" ]
+            Html.input [
+                prop.className "slider anim-speed-slider"
+                prop.type'.range
+                prop.min 25
+                prop.max 400
+                prop.step 25
+                prop.title "Animation speed"
+                prop.value (string model.AnimSpeed)
+                prop.custom ("data-testid", "anim-speed")
+                prop.onChange (fun (value: string) ->
+                    match Int32.TryParse value with
+                    | true, speed -> dispatch (SetAnimSpeed speed)
+                    | _ -> ())
+            ]
+            Html.span [
+                prop.className "hud-value"
+                prop.custom ("data-testid", "anim-speed-value")
+                prop.text (speedLabel model.AnimSpeed)
+            ]
         ]
     ]
+
+let private canvasWatermark (model: Model) =
+    if model.Animation.Playing then
+        let pct =
+            if model.Animation.Total > 0.0 then
+                int (Math.Round(100.0 * model.Animation.Progress / model.Animation.Total))
+            else
+                100
+        Html.div [
+            prop.className "canvas-watermark playing"
+            prop.custom ("data-testid", "anim-progress")
+            prop.text ("drawing… " + string pct + "%")
+        ]
+    else
+        Html.div [
+            prop.className "canvas-watermark"
+            prop.text $"{statsText model.Drawing} · local REPL"
+        ]
 
 let private canvasPane (model: Model) (dispatch: Msg -> unit) =
     Html.section [
@@ -883,7 +1024,7 @@ let private canvasPane (model: Model) (dispatch: Msg -> unit) =
                     canvas model
                     Html.div [ prop.className "hud hud-top"; prop.children [ telemetry model; canvasTools model dispatch ] ]
                     liveDelay model dispatch
-                    Html.div [ prop.className "canvas-watermark"; prop.text $"{statsText model.Drawing} · local REPL" ]
+                    canvasWatermark model
                 ]
             ]
         ]
@@ -1198,10 +1339,42 @@ let private settingsModal (model: Model) (dispatch: Msg -> unit) =
             prop.className "modal-body"
             prop.children [
                 Html.div [ prop.className "modal-section-title"; prop.text "Canvas & interpreter" ]
-                toggleRow "Live run" "Re-run the program while typing." model.AutoRun ToggleAutoRun dispatch
+                toggleRow "Live run" "Re-run the program while typing (turns off animation)." model.AutoRun ToggleAutoRun dispatch
                 toggleRow "Fit drawing" "Fit the view to the drawing bounds." model.Fit ToggleFit dispatch
                 toggleRow "Show turtle" "Render the turtle at its current position." model.ShowTurtle ToggleTurtle dispatch
                 toggleRow "Show grid" "Draw the coordinate grid on the canvas." model.ShowGrid ToggleGrid dispatch
+                toggleRow "Animate drawing" "Reveal the drawing segment by segment on Run (turns off live run)." model.Animate ToggleAnimate dispatch
+                Html.div [
+                    prop.className "toggle-row"
+                    prop.children [
+                        Html.div [
+                            prop.className "toggle-text"
+                            prop.children [
+                                Html.div [ prop.className "toggle-label"; prop.text "Animation speed" ]
+                                Html.div [ prop.className "toggle-desc"; prop.text "Playback speed for the animated drawing." ]
+                            ]
+                        ]
+                        Html.div [
+                            prop.className "inline-control"
+                            prop.children [
+                                Html.input [
+                                    prop.className "slider"
+                                    prop.type'.range
+                                    prop.min 25
+                                    prop.max 400
+                                    prop.step 25
+                                    prop.value (string model.AnimSpeed)
+                                    prop.custom ("data-testid", "anim-speed-settings")
+                                    prop.onChange (fun (value: string) ->
+                                        match Int32.TryParse value with
+                                        | true, speed -> dispatch (SetAnimSpeed speed)
+                                        | _ -> ())
+                                ]
+                                Html.span [ prop.className "hud-value"; prop.text (speedLabel model.AnimSpeed) ]
+                            ]
+                        ]
+                    ]
+                ]
                 Html.div [
                     prop.className "toggle-row"
                     prop.children [

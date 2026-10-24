@@ -129,16 +129,24 @@ try {
   // Stateful REPL (local to this browser)
   await front(p1)
   const p2BeforeRepl = await count(p2, 'svg.canvas polyline')
-  const beforeRepl = await count(p1, 'svg.canvas polyline')
   await p1.click('[data-testid="repl-input"]')
-  await p1.keyboard.type('fd 50', { delay: 20 })
+  await p1.keyboard.type('cs fd 50', { delay: 40 })
+  check('REPL input receives the command', (await p1.$eval('[data-testid="repl-input"]', el => el.value)) === 'cs fd 50')
   await p1.keyboard.press('Enter')
-  check('REPL command is logged', await until(async () => (await text(p1, '.repl-log')).includes('You')))
-  check('REPL command draws on the canvas', await until(async () => (await count(p1, 'svg.canvas polyline')) > beforeRepl))
+  check('REPL command is logged', await until(async () => (await text(p1, '.repl-log')).includes('cs fd 50')))
+  check('REPL command has no error', await until(async () => (await count(p1, '.repl-line.error')) === 0))
+  check('REPL command draws on the canvas', await until(async () => {
+    const stats = (await text(p1, '.program-status')) ?? ''
+    return (await count(p1, 'svg.canvas polyline')) === 1 && stats.includes('paths: 1')
+  }))
   await p1.click('[data-testid="repl-input"]')
-  await p1.keyboard.type('rt 90 fd 25', { delay: 20 })
+  await p1.keyboard.type('rt 90 fd 25', { delay: 40 })
+  check('REPL keeps the second command', (await p1.$eval('[data-testid="repl-input"]', el => el.value)) === 'rt 90 fd 25')
   await p1.keyboard.press('Enter')
-  check('REPL keeps state between commands', await until(async () => (await text(p1, '.repl-log')).includes('Exec · paths:')))
+  check('REPL keeps state between commands', await until(async () => {
+    const stats = (await text(p1, '.program-status')) ?? ''
+    return (await count(p1, 'svg.canvas polyline')) === 2 && stats.includes('paths: 2')
+  }))
   check('REPL is local (page 2 drawing unchanged)', (await count(p2, 'svg.canvas polyline')) === p2BeforeRepl)
 
   // Canvas controls
@@ -165,6 +173,27 @@ try {
   check('SVG export creates a download', await until(async () => (await p1.evaluate(() => window.__downloads)).some(n => n.endsWith('.svg'))))
   await p1.click('[data-testid="export-png"]')
   check('PNG export creates a download', await until(async () => (await p1.evaluate(() => window.__downloads)).some(n => n.endsWith('.png')), 8000))
+
+  // Animated drawing mode
+  await p1.click('[data-testid="animate-toggle"]')
+  check('Animation mode starts playback', await until(async () => (await count(p1, '[data-testid="anim-progress"]')) === 1))
+  const transformBefore = await p1.$eval('svg.canvas g[transform]', el => el.getAttribute('transform'))
+  await sleep(250)
+  const transformAfter = await p1.$eval('svg.canvas g[transform]', el => el.getAttribute('transform'))
+  check('Turtle moves during animation', transformBefore !== transformAfter)
+  await p1.click('[data-testid="animate-toggle"]')
+  check('Disabling animation stops playback', await until(async () => (await count(p1, '[data-testid="anim-progress"]')) === 0))
+  await p1.evaluate(() => {
+    const slider = document.querySelector('[data-testid="anim-speed"]')
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+    setter.call(slider, '50')
+    slider.dispatchEvent(new Event('input', { bubbles: true }))
+    slider.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  check('Animation speed can be changed', await until(async () => (await text(p1, '[data-testid="anim-speed-value"]')) === '0.5×'))
+  await p1.click('[data-testid="animate-replay"]')
+  check('Replay starts playback', await until(async () => (await count(p1, '[data-testid="anim-progress"]')) === 1))
+  check('Replay finishes', await until(async () => (await count(p1, '[data-testid="anim-progress"]')) === 0, 6000))
 
   // Settings modal
   await p1.click('[data-testid="settings-open"]')

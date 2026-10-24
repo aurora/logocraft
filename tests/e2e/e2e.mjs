@@ -122,6 +122,21 @@ try {
   check('Autoindent after to', at >= 0 && lines[at + 1] === '  fd :n', JSON.stringify(lines.slice(Math.max(0, at), at + 3)))
   check('end dedents', at >= 0 && lines[at + 2] === 'end', JSON.stringify(lines.slice(Math.max(0, at), at + 3)))
 
+  // The 3D example loads and renders
+  await np.click('[data-testid="file-menu"]')
+  await np.waitForSelector('.dropdown-item')
+  await np.evaluate(() => {
+    const item = [...document.querySelectorAll('.dropdown-item')].find(x => x.textContent.includes('3D Tree'))
+    if (item) item.click()
+  })
+  check('3D Tree example renders', await until(async () => (await count(np, 'svg.canvas polyline')) > 100))
+  await np.click('[data-testid="view-3d"]')
+  check('3D Tree opens in perspective', await until(async () => {
+    const view = await np.$eval('svg.canvas', el => el.getAttribute('data-view'))
+    return view === '3d' && (await np.$$eval('.grid3d line', els => els.length)) > 0
+  }))
+  await np.click('[data-testid="view-3d"]')
+
   await nameCtx.close()
 
   const p1 = await open()
@@ -253,6 +268,27 @@ try {
   await p1.mouse.wheel({ deltaY: 120 })
   check('Scroll wheel zooms out', await until(async () => parseFloat((await text(p1, '.zoom-value')) ?? '999') < zoomedIn))
   await p1.click('[data-testid="zoom-reset"]')
+
+  // Perspective view and camera orbit
+  check('Canvas starts in 2D', (await p1.$eval('svg.canvas', el => el.getAttribute('data-view'))) === '2d')
+  await p1.click('[data-testid="view-3d"]')
+  check('3D view activates', await until(async () => (await p1.$eval('svg.canvas', el => el.getAttribute('data-view'))) === '3d'))
+  check('3D telemetry shows Z', await until(async () => ((await text(p1, '.telemetry')) ?? '').includes('Z:')))
+  const yawBefore = await p1.$eval('svg.canvas', el => el.getAttribute('data-yaw'))
+  const orbitBox = await p1.$eval('.canvas-surface', el => {
+    const r = el.getBoundingClientRect()
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+  })
+  await p1.mouse.move(orbitBox.x, orbitBox.y)
+  await p1.mouse.down()
+  await p1.mouse.move(orbitBox.x + 100, orbitBox.y + 30, { steps: 6 })
+  await p1.mouse.up()
+  check('Dragging orbits the camera', await until(async () => (await p1.$eval('svg.canvas', el => el.getAttribute('data-yaw'))) !== yawBefore))
+  await p1.click('[data-testid="reset-camera"]')
+  check('Camera reset restores the default', await until(async () => (await p1.$eval('svg.canvas', el => el.getAttribute('data-yaw'))) === '25'))
+  await p1.click('[data-testid="view-3d"]')
+  check('Back to the 2D view', await until(async () => (await p1.$eval('svg.canvas', el => el.getAttribute('data-view'))) === '2d'))
+
   const turtleBefore = await count(p1, 'svg.canvas polygon')
   await p1.click('[data-testid="turtle-toggle"]')
   check('Turtle can be hidden', await until(async () => (await count(p1, 'svg.canvas polygon')) < turtleBefore))

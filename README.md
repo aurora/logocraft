@@ -14,6 +14,9 @@ There is no database and no user management: each browser stores its rooms local
   canvas zoom (buttons and scroll wheel), turtle/grid toggles and a room settings panel.
   The LOGO editor highlights syntax, completes primitives and auto-indents list brackets
   and `to … end` blocks.
+- **3D view** — switch the canvas from the top-down projection to a client-side perspective
+  view. Drag to orbit, scroll to zoom, and reset the camera; paths are depth-sorted with a
+  subtle depth fade, with a ground grid and x/y/z axes for orientation.
 - **Project export** — download the program as `.logo` or a versioned room bundle (`.json`
   with program, shared notes, room URL and timestamp), plus SVG/PNG drawing snapshots.
 - **Animated drawing** — reveal the drawing segment by segment while the turtle moves along the
@@ -92,6 +95,10 @@ flowchart LR
 - **Presence**: awareness carries `{ name, color }`; the confirmed name is stored in
   `localStorage` (`logo-name`) and can be changed at any time. The remote caret labels come
   from y-codemirror and are kept permanently visible by the stylesheet.
+- **3D view** is rendered entirely in the client (`View.fs`): the existing paths are rotated
+  around the drawing centre, perspective-projected, depth-sorted and drawn with a depth-based
+  opacity. The interpreter is unchanged; the camera is an orbit (yaw/pitch) controlled by
+  dragging the canvas.
 - **Inviting**: *Copy link* copies the room URL; *Join room* accepts a room ID or a full
   invite link. *New room* creates a room, *Project Files* switches rooms, and *Forget*
   removes the local copy only.
@@ -178,8 +185,15 @@ pitchup 90                     ; straight up
 repeat 4 [fd 100 rt 90]        ; square in the xz plane
 ```
 
-**Rendering status:** the interpreter already produces 3D lines, but the canvas is still a
-top-down view (z is ignored). Camera and projection are the next step.
+**Rendering status:** the canvas can switch between the original top-down projection and a
+client-side perspective view (the *3D* button in the canvas toolbar). In 3D view, drag to
+orbit, scroll to zoom and use the reset-camera button. Paths are depth-sorted with a slight
+depth fade, and a ground grid plus x/y/z axes provide orientation. There is no hidden-line
+removal and no panning yet. In the 2D view z is still ignored, as before.
+
+The **3D Tree** example (`File → Examples → 3D Tree`) grows a recursive fractal tree using
+`pitchup`/`pitchdown` and `rollleft`/`rollright`; it is much more interesting in the 3D view
+than in the top-down projection.
 
 Note as in UCBLogo: `10 -5` (space before, none after) is **two** values (this is how
 `setxy 0 -200` works); write a subtraction as `10 - 5` or `10-5`.
@@ -205,6 +219,8 @@ visible.
 - **No access control**: anyone with the URL can read and write. Names are display-only and
   not unique; colors and cursor labels help tell collaborators apart. Roles, passwords and
   room visibility in the settings panel are not backed by the server.
+- **3D view** has no hidden-line removal or panning; overlapping lines remain visible through
+  each other. It is an inspection view, not a full 3D engine.
 - **REPL is local**: typed commands affect only this browser and are not synchronized.
   *Run* resets the session to the shared program.
 - “Load example” replaces the shared code **for everyone**.

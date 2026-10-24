@@ -851,6 +851,14 @@ button:disabled { cursor: not-allowed; opacity: .45; }
     var(--surface-container-lowest);
 }
 
+.canvas-surface.view-3d {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.canvas-surface.view-3d.dragging { cursor: grabbing; }
+
 .canvas { display: block; width: 100%; height: 100%; }
 .turtle-paths { filter: drop-shadow(0 0 3px rgba(78, 222, 163, .2)); }
 

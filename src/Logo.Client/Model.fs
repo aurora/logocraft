@@ -94,6 +94,11 @@ type Model =
       AnimSpeed: int
       Fit: bool
       Zoom: int
+      /// Perspective view instead of the top-down projection
+      View3D: bool
+      /// Camera orbit around the drawing (degrees)
+      CameraYaw: int
+      CameraPitch: int
       ShowTurtle: bool
       ShowGrid: bool
       LiveDelayMs: int
@@ -121,6 +126,9 @@ type Msg =
     | ZoomOut
     | ZoomBy of int
     | ZoomReset
+    | Toggle3D
+    | OrbitCamera of dx: int * dy: int
+    | ResetCamera
     | SetLiveDelay of int
     | StatusChanged of string
     | PeersChanged of names: string[] * colors: string[] * selfIndex: int
@@ -324,6 +332,9 @@ let init () : Model * Cmd<Msg> =
       AnimSpeed = 100
       Fit = false
       Zoom = 100
+      View3D = false
+      CameraYaw = 25
+      CameraPitch = 20
       ShowTurtle = true
       ShowGrid = true
       LiveDelayMs = 150
@@ -420,6 +431,15 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     | ZoomOut -> { model with Zoom = max 50 (model.Zoom - 15) }, Cmd.none
     | ZoomBy delta -> { model with Zoom = max 50 (min 200 (model.Zoom + delta)) }, Cmd.none
     | ZoomReset -> { model with Zoom = 100 }, Cmd.none
+    | Toggle3D -> { model with View3D = not model.View3D }, Cmd.none
+    | OrbitCamera(dx, dy) ->
+        if not model.View3D then
+            model, Cmd.none
+        else
+            { model with
+                CameraYaw = ((model.CameraYaw + dx) % 360 + 360) % 360
+                CameraPitch = max -80 (min 80 (model.CameraPitch - dy)) }, Cmd.none
+    | ResetCamera -> { model with CameraYaw = 25; CameraPitch = 20 }, Cmd.none
     | SetLiveDelay ms -> { model with LiveDelayMs = max 20 (min 500 ms) }, Cmd.none
     | StatusChanged s ->
         let status =

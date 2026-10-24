@@ -328,6 +328,69 @@ export function attachWheelZoom(element, onZoom) {
   return () => element.removeEventListener('wheel', handler)
 }
 
+/**
+ * Orbits the 3D camera with a left-button drag. Only active while the element
+ * has the `view-3d` class. Deltas are batched per animation frame.
+ */
+export function attachOrbit(element, onOrbit) {
+  let dragging = false
+  let lastX = 0
+  let lastY = 0
+  let accX = 0
+  let accY = 0
+  let frame = 0
+
+  const flush = () => {
+    frame = 0
+    if (accX === 0 && accY === 0) return
+    const dx = accX
+    const dy = accY
+    accX = 0
+    accY = 0
+    onOrbit(dx, dy)
+  }
+
+  const down = event => {
+    if (!element.classList.contains('view-3d')) return
+    if (event.button !== 0) return
+    if (event.target.closest && event.target.closest('button, input, a, .hud')) return
+    dragging = true
+    lastX = event.clientX
+    lastY = event.clientY
+    element.classList.add('dragging')
+    try { element.setPointerCapture(event.pointerId) } catch { /* ignore */ }
+  }
+
+  const move = event => {
+    if (!dragging) return
+    accX += event.clientX - lastX
+    accY += event.clientY - lastY
+    lastX = event.clientX
+    lastY = event.clientY
+    if (!frame) frame = requestAnimationFrame(flush)
+  }
+
+  const up = event => {
+    if (!dragging) return
+    dragging = false
+    element.classList.remove('dragging')
+    try { element.releasePointerCapture(event.pointerId) } catch { /* ignore */ }
+  }
+
+  element.addEventListener('pointerdown', down)
+  element.addEventListener('pointermove', move)
+  element.addEventListener('pointerup', up)
+  element.addEventListener('pointercancel', up)
+
+  return () => {
+    if (frame) cancelAnimationFrame(frame)
+    element.removeEventListener('pointerdown', down)
+    element.removeEventListener('pointermove', move)
+    element.removeEventListener('pointerup', up)
+    element.removeEventListener('pointercancel', up)
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Editor
 // ---------------------------------------------------------------------------

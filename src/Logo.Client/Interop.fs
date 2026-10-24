@@ -49,6 +49,11 @@ let pickLogoFile (onText: Action<string>) : unit = jsNative
 [<Import("attachWheelZoom", "./editor.js")>]
 let attachWheelZoom (element: HTMLElement) (onZoom: Action<int>) : (unit -> unit) = jsNative
 
+/// Orbits the 3D camera with a drag (active while the element has `view-3d`).
+/// `onOrbit` receives the horizontal and vertical deltas in pixels.
+[<Import("attachOrbit", "./editor.js")>]
+let attachOrbit (element: HTMLElement) (onOrbit: Action<int, int>) : (unit -> unit) = jsNative
+
 /// Downloads the LOGO program as a plain-text file.
 [<Import("downloadProgram", "./editor.js")>]
 let downloadProgram (code: string) (filename: string) : unit = jsNative

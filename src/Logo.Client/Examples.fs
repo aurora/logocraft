@@ -61,6 +61,38 @@ pu setxy 0 -200 pd
 tree 90
 """
 
+let tree3D =
+    """; 3D fractal tree — switch to the 3D view and drag to orbit
+to branch :len :depth
+  if :depth = 0 [stop]
+  setpensize :len / 14 + 0.6
+  ifelse :depth < 3 [setpc "green] [setpc "brown]
+  fd :len
+
+  pitchup 28
+  rt 32
+  branch :len * 0.66 :depth - 1
+  lt 32
+  pitchdown 28
+
+  pitchup 28
+  lt 32
+  branch :len * 0.66 :depth - 1
+  rt 32
+  pitchdown 28
+
+  rollright 32
+  branch :len * 0.66 :depth - 1
+  rollleft 32
+
+  pu bk :len pd
+end
+
+home
+pu setxyz 0 -160 0 pd
+branch 110 6
+"""
+
 let koch =
     """; Koch snowflake
 to koch :n :len
@@ -94,6 +126,7 @@ let all : (string * string) list =
       "Star", star
       "Spiral", spiral
       "Tree", tree
+      "3D Tree", tree3D
       "Koch Snowflake", koch
       "Circles", circles ]
 

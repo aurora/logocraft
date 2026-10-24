@@ -161,8 +161,17 @@ let private animatedTurtle (drawing: Drawing) (progress: float) =
                     let px = x0 + (x1 - x0) * fraction
                     let py = y0 + (y1 - y0) * fraction
                     let pz = z0 + (z1 - z0) * fraction
-                    let heading = Math.Atan2(x1 - x0, -(y1 - y0)) * 180.0 / Math.PI
-                    let heading = (heading + 360.0) % 360.0
+                    let dx = x1 - x0
+                    let dy = y1 - y0
+                    let dz = z1 - z0
+                    let length = Math.Sqrt(dx * dx + dy * dy + dz * dz)
+                    let (fx, fy, fz) =
+                        if length < 1e-9 then (0.0, 1.0, 0.0)
+                        else (dx / length, dy / length, dz / length)
+                    let heading =
+                        if abs fx < 1e-12 && abs fy < 1e-12 then 0.0
+                        else (Math.Atan2(fx, fy) * 180.0 / Math.PI + 360.0) % 360.0
+                    let pitch = Math.Asin(max -1.0 (min 1.0 fz)) * 180.0 / Math.PI
                     found <-
                         Some
                             { drawing.Turtle with
@@ -170,7 +179,8 @@ let private animatedTurtle (drawing: Drawing) (progress: float) =
                                 Y = py
                                 Z = pz
                                 Heading = heading
-                                Pitch = 0.0
+                                Pitch = pitch
+                                Forward = (fx, fy, fz)
                                 PenDown = true }
         match found with
         | Some turtle -> turtle
@@ -184,7 +194,299 @@ let private pathsNow (model: Model) =
     if model.Animation.Playing then partialPaths model.Drawing.Paths model.Animation.Progress
     else model.Drawing.Paths
 
-let private canvas (model: Model) =
+type private Camera =
+    { Eye: float * float * float
+      Right: float * float * float
+      Up: float * float * float
+      Forward: float * float * float
+      Focal: float }
+
+type private Bounds3D =
+    { CenterX: float
+      CenterY: float
+      CenterZ: float
+      Radius: float
+      MinY: float }
+
+type private ProjectedPath =
+    { Color: string
+      Width: float
+      Screen: (float * float)[]
+      Depth: float }
+
+let private vsub (ax: float, ay: float, az: float) (bx: float, by: float, bz: float) =
+    (ax - bx, ay - by, az - bz)
+
+let private vcross (ax: float, ay: float, az: float) (bx: float, by: float, bz: float) =
+    (ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx)
+
+let private vdot (ax: float, ay: float, az: float) (bx: float, by: float, bz: float) =
+    ax * bx + ay * by + az * bz
+
+let private vnormalize (x: float, y: float, z: float) =
+    let length = Math.Sqrt(x * x + y * y + z * z)
+    if length < 1e-9 then (0.0, 0.0, 0.0) else (x / length, y / length, z / length)
+
+let private bounds3D (drawing: Drawing) =
+    let mutable minX = Double.MaxValue
+    let mutable maxX = Double.MinValue
+    let mutable minY = Double.MaxValue
+    let mutable maxY = Double.MinValue
+    let mutable minZ = Double.MaxValue
+    let mutable maxZ = Double.MinValue
+    let extend (x: float) (y: float) (z: float) =
+        minX <- min minX x
+        maxX <- max maxX x
+        minY <- min minY y
+        maxY <- max maxY y
+        minZ <- min minZ z
+        maxZ <- max maxZ z
+    for path in drawing.Paths do
+        for (x, y, z) in path.Points do
+            extend x y z
+    extend drawing.Turtle.X drawing.Turtle.Y drawing.Turtle.Z
+    if minX = Double.MaxValue then
+        { CenterX = 0.0; CenterY = 0.0; CenterZ = 0.0; Radius = 100.0; MinY = 0.0 }
+    else
+        let dx = maxX - minX
+        let dy = maxY - minY
+        let dz = maxZ - minZ
+        { CenterX = (minX + maxX) / 2.0
+          CenterY = (minY + maxY) / 2.0
+          CenterZ = (minZ + maxZ) / 2.0
+          Radius = max 50.0 (0.5 * Math.Sqrt(dx * dx + dy * dy + dz * dz))
+          MinY = minY }
+
+let private cameraOf (model: Model) =
+    let bounds = bounds3D model.Drawing
+    let yaw = float model.CameraYaw * Math.PI / 180.0
+    let pitch = float model.CameraPitch * Math.PI / 180.0
+    let distance = max 120.0 (bounds.Radius * 2.8)
+    let eye =
+        ( bounds.CenterX + distance * Math.Cos pitch * Math.Sin yaw,
+          bounds.CenterY + distance * Math.Sin pitch,
+          bounds.CenterZ + distance * Math.Cos pitch * Math.Cos yaw )
+    let forward = vnormalize (vsub (bounds.CenterX, bounds.CenterY, bounds.CenterZ) eye)
+    let right = vnormalize (vcross forward (0.0, 1.0, 0.0))
+    let up = vcross right forward
+    { Eye = eye; Right = right; Up = up; Forward = forward; Focal = distance }
+
+let private project3D (camera: Camera) (x: float) (y: float) (z: float) =
+    let (ex, ey, ez) = camera.Eye
+    let view = (x - ex, y - ey, z - ez)
+    let camX = vdot view camera.Right
+    let camY = vdot view camera.Up
+    let camZ = vdot view camera.Forward
+    let depth = max 0.001 camZ
+    (camera.Focal * camX / depth, -(camera.Focal * camY / depth), camZ)
+
+let private viewBox3D (model: Model) =
+    let camera = cameraOf model
+    let mutable minX = Double.MaxValue
+    let mutable maxX = Double.MinValue
+    let mutable minY = Double.MaxValue
+    let mutable maxY = Double.MinValue
+    let extend (x: float, y: float, z: float) =
+        let (sx, sy, _) = project3D camera x y z
+        minX <- min minX sx
+        maxX <- max maxX sx
+        minY <- min minY sy
+        maxY <- max maxY sy
+    for path in model.Drawing.Paths do
+        for point in path.Points do
+            extend point
+    let turtle = model.Drawing.Turtle
+    extend (turtle.X, turtle.Y, turtle.Z)
+    if minX = Double.MaxValue then
+        (-300.0, -300.0, 600.0, 600.0)
+    else
+        let width = maxX - minX
+        let height = maxY - minY
+        let size = max 100.0 (max width height) * 1.15
+        let cx = (minX + maxX) / 2.0
+        let cy = (minY + maxY) / 2.0
+        let factor = 100.0 / float (max 1 model.Zoom)
+        let w = size * factor
+        let h = size * factor
+        (cx - w / 2.0, cy - h / 2.0, w, h)
+
+let private grid3D (model: Model) (camera: Camera) =
+    let bounds = bounds3D model.Drawing
+    let extent = max 100.0 (bounds.Radius * 2.0)
+    let step = extent / 8.0
+    let y = bounds.MinY
+    let line (x1, z1) (x2, z2) major =
+        let (sx1, sy1, _) = project3D camera x1 y z1
+        let (sx2, sy2, _) = project3D camera x2 y z2
+        Svg.line [
+            attr "x1" (box sx1)
+            attr "y1" (box sy1)
+            attr "x2" (box sx2)
+            attr "y2" (box sy2)
+            attr "stroke" (box (if major then "rgba(255,255,255,0.14)" else "rgba(255,255,255,0.05)"))
+            attr "stroke-width" (box (if major then 1.0 else 0.75))
+        ]
+    Svg.g [
+        svg.className "grid3d"
+        svg.children [
+            for i in -8 .. 8 do
+                let offset = float i * step
+                line
+                    (bounds.CenterX + offset, bounds.CenterZ - extent)
+                    (bounds.CenterX + offset, bounds.CenterZ + extent)
+                    (i = 0)
+                line
+                    (bounds.CenterX - extent, bounds.CenterZ + offset)
+                    (bounds.CenterX + extent, bounds.CenterZ + offset)
+                    (i = 0)
+        ]
+    ]
+
+let private axes3D (camera: Camera) (radius: float) =
+    let length = max 80.0 (radius * 1.2)
+    let origin = project3D camera 0.0 0.0 0.0
+    let xEnd = project3D camera length 0.0 0.0
+    let yEnd = project3D camera 0.0 length 0.0
+    let zEnd = project3D camera 0.0 0.0 length
+    let axis (sx1, sy1, _) (sx2, sy2, _) color =
+        Svg.line [
+            attr "x1" (box sx1)
+            attr "y1" (box sy1)
+            attr "x2" (box sx2)
+            attr "y2" (box sy2)
+            attr "stroke" (box color)
+            attr "stroke-width" (box 1.5)
+            attr "stroke-opacity" (box 0.75)
+            attr "stroke-dasharray" (box "4 3")
+        ]
+    let (ox, oy, _) = origin
+    Svg.g [
+        svg.className "axes3d"
+        svg.children [
+            axis origin xEnd "#fb7185"
+            axis origin yEnd "#4edea3"
+            axis origin zEnd "#4cd7f6"
+            Svg.circle [
+                attr "cx" (box ox)
+                attr "cy" (box oy)
+                attr "r" (box 3.0)
+                attr "fill" (box "#dae2fd")
+                attr "fill-opacity" (box 0.5)
+            ]
+        ]
+    ]
+
+let private turtle3D (model: Model) (camera: Camera) =
+    let t = turtleNow model
+    let (sx, sy, _) = project3D camera t.X t.Y t.Z
+    let (fx, fy, fz) = t.Forward
+    let (ax, ay, _) =
+        project3D camera (t.X + fx * 20.0) (t.Y + fy * 20.0) (t.Z + fz * 20.0)
+    let dx = ax - sx
+    let dy = ay - sy
+    let angle =
+        if abs dx < 1e-9 && abs dy < 1e-9 then 0.0
+        else Math.Atan2(dx, -dy) * 180.0 / Math.PI
+    Svg.g [
+        svg.transform [ transform.translate (sx, sy); transform.rotate (angle) ]
+        svg.children [
+            Svg.circle [
+                attr "cx" (box 0.0)
+                attr "cy" (box 0.0)
+                attr "r" (box 14.0)
+                attr "fill" (box "#4edea3")
+                attr "fill-opacity" (box 0.12)
+                attr "stroke" (box "#4edea3")
+                attr "stroke-opacity" (box 0.3)
+                attr "stroke-width" (box 1.0)
+            ]
+            Svg.polygon [
+                svg.points "0,-12 10,8 0,3 -10,8"
+                svg.fill "#10b981"
+                svg.stroke "#064e3b"
+                svg.strokeWidth 1.5
+                attr "stroke-linejoin" (box "round")
+            ]
+            Svg.line [
+                attr "x1" (box 0.0)
+                attr "y1" (box 3.0)
+                attr "x2" (box 0.0)
+                attr "y2" (box -18.0)
+                attr "stroke" (box "#4cd7f6")
+                attr "stroke-linecap" (box "round")
+                attr "stroke-width" (box 2.0)
+            ]
+            Svg.polygon [
+                svg.points "0,-22 -3,-17 3,-17"
+                svg.fill "#4cd7f6"
+            ]
+            Svg.circle [
+                attr "cx" (box 0.0)
+                attr "cy" (box 0.0)
+                attr "r" (box 2.0)
+                attr "fill" (box "#dae2fd")
+            ]
+        ]
+    ]
+
+let private canvas3D (model: Model) =
+    let camera = cameraOf model
+    let (vx, vy, vw, vh) = viewBox3D model
+    let projected =
+        [ for path in pathsNow model do
+            if path.Points.Length > 0 then
+                let screen =
+                    path.Points
+                    |> Array.map (fun (x, y, z) ->
+                        let (sx, sy, depth) = project3D camera x y z
+                        (sx, sy), depth)
+                let depth = screen |> Array.averageBy snd
+                { Color = path.Color
+                  Width = path.Width
+                  Screen = screen |> Array.map fst
+                  Depth = depth } ]
+        |> List.sortByDescending (fun path -> path.Depth)
+    let depths = projected |> List.map (fun path -> path.Depth)
+    let minDepth = if depths.IsEmpty then 0.0 else List.min depths
+    let maxDepth = if depths.IsEmpty then 0.0 else List.max depths
+    let opacityFor depth =
+        if maxDepth - minDepth < 1e-6 then 0.95
+        else 0.6 + 0.4 * (1.0 - (depth - minDepth) / (maxDepth - minDepth))
+    let screenPoints (points: (float * float)[]) =
+        points |> Array.map (fun (x, y) -> num x + "," + num y) |> String.concat " "
+    let bounds = bounds3D model.Drawing
+    let t = turtleNow model
+    Svg.svg [
+        svg.className "canvas"
+        attr "data-view" (box "3d")
+        attr "data-yaw" (box model.CameraYaw)
+        attr "data-pitch" (box model.CameraPitch)
+        attr "viewBox" (box $"{num vx} {num vy} {num vw} {num vh}")
+        attr "preserveAspectRatio" (box "xMidYMid meet")
+        svg.children [
+            if model.ShowGrid then grid3D model camera
+            axes3D camera bounds.Radius
+            Svg.g [
+                svg.className "turtle-paths"
+                svg.children [
+                    for path in projected do
+                        Svg.polyline [
+                            svg.points (screenPoints path.Screen)
+                            svg.fill "none"
+                            svg.stroke (ink path.Color)
+                            svg.strokeWidth path.Width
+                            attr "stroke-opacity" (box (opacityFor path.Depth))
+                            attr "stroke-linecap" (box "round")
+                            attr "stroke-linejoin" (box "round")
+                        ]
+                ]
+            ]
+            if model.ShowTurtle && t.Visible then
+                turtle3D model camera
+        ]
+    ]
+
+let private canvas2D (model: Model) =
     let (vx, vy, vw, vh) = viewBoxOf model
     let t = turtleNow model
 
@@ -201,6 +503,7 @@ let private canvas (model: Model) =
 
     Svg.svg [
         svg.className "canvas"
+        attr "data-view" (box "2d")
         attr "viewBox" (box $"{num vx} {num vy} {num vw} {num vh}")
         attr "preserveAspectRatio" (box "xMidYMid meet")
         svg.children [
@@ -303,6 +606,9 @@ let private canvas (model: Model) =
                 ]
         ]
     ]
+
+let private canvas (model: Model) =
+    if model.View3D then canvas3D model else canvas2D model
 
 // ---------------------------------------------------------------------------
 // Top bar
@@ -866,25 +1172,32 @@ let private telemetryItem (label: string) (value: string) (cls: string) =
 
 let private telemetry (model: Model) =
     let t = turtleNow model
+    let zItems =
+        if model.View3D then
+            [ Html.span [ prop.className "telemetry-sep"; prop.text "•" ]
+              telemetryItem "Z:" (num t.Z) "secondary" ]
+        else
+            []
     Html.div [
         prop.className "hud telemetry"
-        prop.children [
-            telemetryItem "X:" (num t.X) "primary"
-            Html.span [ prop.className "telemetry-sep"; prop.text "•" ]
-            telemetryItem "Y:" (num t.Y) "secondary"
-            Html.span [ prop.className "telemetry-sep"; prop.text "•" ]
-            telemetryItem "Heading:" (num t.Heading + "°") "tertiary"
-            Html.span [ prop.className "telemetry-sep"; prop.text "•" ]
-            telemetryItem "Pitch:" (num t.Pitch + "°") "muted"
-            Html.span [ prop.className "telemetry-sep"; prop.text "•" ]
-            Html.div [
-                prop.className "telemetry-item"
-                prop.children [
-                    Html.span [ prop.className ("status-dot " + (if t.PenDown then "ok" else "bad")) ]
-                    Html.span [ prop.className "telemetry-value"; prop.text (if t.PenDown then "Pen down" else "Pen up") ]
-                ]
-            ]
-        ]
+        prop.children (
+            [ telemetryItem "X:" (num t.X) "primary"
+              Html.span [ prop.className "telemetry-sep"; prop.text "•" ]
+              telemetryItem "Y:" (num t.Y) "secondary" ]
+            @ zItems
+            @ [ Html.span [ prop.className "telemetry-sep"; prop.text "•" ]
+                telemetryItem "Heading:" (num t.Heading + "°") "tertiary"
+                Html.span [ prop.className "telemetry-sep"; prop.text "•" ]
+                telemetryItem "Pitch:" (num t.Pitch + "°") "muted"
+                Html.span [ prop.className "telemetry-sep"; prop.text "•" ]
+                Html.div [
+                    prop.className "telemetry-item"
+                    prop.children [
+                        Html.span [ prop.className ("status-dot " + (if t.PenDown then "ok" else "bad")) ]
+                        Html.span [ prop.className "telemetry-value"; prop.text (if t.PenDown then "Pen down" else "Pen up") ]
+                    ]
+                ] ]
+        )
     ]
 
 let private canvasTools (model: Model) (dispatch: Msg -> unit) =
@@ -933,6 +1246,23 @@ let private canvasTools (model: Model) (dispatch: Msg -> unit) =
                 prop.onClick (fun _ -> dispatch ToggleGrid)
                 prop.children [ icon "grid_on"; Html.span [ prop.text "Grid" ] ]
             ]
+            Html.button [
+                prop.className ("ghost-btn tiny" + (if model.View3D then " active" else ""))
+                prop.type'.button
+                prop.title "Toggle perspective view"
+                prop.custom ("data-testid", "view-3d")
+                prop.onClick (fun _ -> dispatch Toggle3D)
+                prop.children [ icon "view_in_ar"; Html.span [ prop.text "3D" ] ]
+            ]
+            if model.View3D then
+                Html.button [
+                    prop.className "icon-btn tiny"
+                    prop.type'.button
+                    prop.title "Reset camera"
+                    prop.custom ("data-testid", "reset-camera")
+                    prop.onClick (fun _ -> dispatch ResetCamera)
+                    prop.children [ icon "3d_rotation" ]
+                ]
             Html.div [ prop.className "tool-sep" ]
             Html.button [
                 prop.className ("ghost-btn tiny" + (if model.Animate then " active" else ""))
@@ -1013,9 +1343,12 @@ let private canvasWatermark (model: Model) =
             prop.text ("drawing… " + string pct + "%")
         ]
     else
+        let hint =
+            if model.View3D then "3D view · drag to orbit · scroll to zoom"
+            else "local REPL · scroll to zoom"
         Html.div [
             prop.className "canvas-watermark"
-            prop.text $"{statsText model.Drawing} · local REPL · scroll to zoom"
+            prop.text $"{statsText model.Drawing} · {hint}"
         ]
 
 [<ReactComponent>]
@@ -1025,18 +1358,24 @@ let private CanvasSurface (model: Model) (dispatch: Msg -> unit) =
     React.useEffectOnce (fun () ->
         match surface.current with
         | Some element ->
-            let dispose =
+            let disposeWheel =
                 Interop.attachWheelZoom
                     element
                     (Action<int>(fun direction -> dispatch (ZoomBy (direction * 10))))
+            let disposeOrbit =
+                Interop.attachOrbit
+                    element
+                    (Action<int, int>(fun dx dy -> dispatch (OrbitCamera(dx, dy))))
             { new IDisposable with
-                member _.Dispose() = dispose () }
+                member _.Dispose() =
+                    disposeWheel ()
+                    disposeOrbit () }
         | None -> { new IDisposable with member _.Dispose() = () })
 
     Html.div [
         prop.ref surface
-        prop.className "canvas-surface"
-        prop.title "Scroll to zoom"
+        prop.className ("canvas-surface" + (if model.View3D then " view-3d" else ""))
+        prop.title (if model.View3D then "Drag to orbit · scroll to zoom" else "Scroll to zoom")
         prop.children [
             canvas model
             Html.div [ prop.className "hud hud-top"; prop.children [ telemetry model; canvasTools model dispatch ] ]
@@ -1484,6 +1823,7 @@ let private settingsModal (model: Model) (dispatch: Msg -> unit) =
                 toggleRow "Fit drawing" "Fit the view to the drawing bounds." model.Fit ToggleFit dispatch
                 toggleRow "Show turtle" "Render the turtle at its current position." model.ShowTurtle ToggleTurtle dispatch
                 toggleRow "Show grid" "Draw the coordinate grid on the canvas." model.ShowGrid ToggleGrid dispatch
+                toggleRow "3D view" "Switch to a perspective view; drag on the canvas to orbit." model.View3D Toggle3D dispatch
                 toggleRow "Animate drawing" "Reveal the drawing segment by segment on Run (turns off live run)." model.Animate ToggleAnimate dispatch
                 Html.div [
                     prop.className "toggle-row"

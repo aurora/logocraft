@@ -12,6 +12,8 @@ There is no database and no user management: each browser stores its rooms local
 
 - **LogoCraft Studio UI** — dark IDE workspace with sidebar, editor tabs, telemetry HUD,
   canvas zoom (buttons and scroll wheel), turtle/grid toggles and a room settings panel.
+  The LOGO editor highlights syntax, completes primitives and auto-indents list brackets
+  and `to … end` blocks.
 - **Project export** — download the program as `.logo` or a versioned room bundle (`.json`
   with program, shared notes, room URL and timestamp), plus SVG/PNG drawing snapshots.
 - **Animated drawing** — reveal the drawing segment by segment while the turtle moves along the

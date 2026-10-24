@@ -7,7 +7,7 @@ import {
   drawSelection, Decoration
 } from '@codemirror/view'
 import {
-  StreamLanguage, syntaxHighlighting, HighlightStyle, bracketMatching, indentOnInput
+  StreamLanguage, syntaxHighlighting, HighlightStyle, bracketMatching, indentOnInput, indentUnit
 } from '@codemirror/language'
 import { defaultKeymap, indentWithTab } from '@codemirror/commands'
 import { closeBrackets, closeBracketsKeymap, autocompletion } from '@codemirror/autocomplete'
@@ -31,7 +31,7 @@ function logoLanguage(primitives) {
   const known = new Set(primitives)
   return StreamLanguage.define({
     name: 'logo',
-    startState: () => ({ afterTo: false }),
+    startState: () => ({ afterTo: false, bracketDepth: 0, toDepth: 0 }),
     token(stream, state) {
       if (stream.eatSpace()) return null
       if (stream.eat(';')) { stream.skipToEnd(); return 'comment' }
@@ -39,17 +39,29 @@ function logoLanguage(primitives) {
       if (stream.match(/^:[^\s\[\]()+\-*\/%=<>;]*/)) return 'variableName.local'
       if (stream.match(/^(\d+\.?\d*|\.\d+)/)) return 'number'
       if (stream.match(/^(<=|>=|<>|[+\-*\/%=<>])/)) return 'operator'
-      if (stream.match(/^[\[\]()]/)) return 'bracket'
+      if (stream.match(/^[\[\]()]/)) {
+        const bracket = stream.current()
+        if (bracket === '[') state.bracketDepth++
+        else if (bracket === ']') state.bracketDepth = Math.max(0, state.bracketDepth - 1)
+        return 'bracket'
+      }
       if (stream.match(/^[^\s\[\]()+\-*\/%=<>;":]+/)) {
         const word = stream.current().toLowerCase()
         if (state.afterTo) { state.afterTo = false; return 'variableName.definition' }
-        if (word === 'to') { state.afterTo = true; return 'keyword' }
+        if (word === 'to') { state.afterTo = true; state.toDepth++; return 'keyword' }
+        if (word === 'end') { state.toDepth = Math.max(0, state.toDepth - 1); return 'keyword' }
         if (CONTROL.has(word)) return 'keyword'
         if (known.has(word)) return 'variableName.standard'
         return null
       }
       stream.next()
       return null
+    },
+    indent(state, textAfter) {
+      let depth = state.bracketDepth + state.toDepth
+      if (/^\]/.test(textAfter) && state.bracketDepth > 0) depth--
+      else if (/^end\b/i.test(textAfter) && state.toDepth > 0) depth--
+      return Math.max(0, depth) * 2
     }
   })
 }
@@ -459,7 +471,11 @@ export function createEditor(codeParent, notesParent, opts) {
         bracketMatching(),
         closeBrackets(),
         // In Logo `"` is a word prefix, not a quote pair — only auto-close brackets.
-        EditorState.languageData.of(() => [{ closeBrackets: { brackets: ['(', '['] } }]),
+        EditorState.languageData.of(() => [{
+          closeBrackets: { brackets: ['(', '['] },
+          indentOnInput: /^\s*(?:\]|end)$/i
+        }]),
+        indentUnit.of('  '),
         autocompletion({ override: [completionSource(opts.primitives)] }),
         logoLanguage(opts.primitives),
         syntaxHighlighting(logoHighlight),

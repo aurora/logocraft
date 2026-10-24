@@ -1012,23 +1012,40 @@ let private canvasWatermark (model: Model) =
     else
         Html.div [
             prop.className "canvas-watermark"
-            prop.text $"{statsText model.Drawing} · local REPL"
+            prop.text $"{statsText model.Drawing} · local REPL · scroll to zoom"
         ]
+
+[<ReactComponent>]
+let private CanvasSurface (model: Model) (dispatch: Msg -> unit) =
+    let surface = React.useElementRef ()
+
+    React.useEffectOnce (fun () ->
+        match surface.current with
+        | Some element ->
+            let dispose =
+                Interop.attachWheelZoom
+                    element
+                    (Action<int>(fun direction -> dispatch (ZoomBy (direction * 10))))
+            { new IDisposable with
+                member _.Dispose() = dispose () }
+        | None -> { new IDisposable with member _.Dispose() = () })
+
+    Html.div [
+        prop.ref surface
+        prop.className "canvas-surface"
+        prop.title "Scroll to zoom"
+        prop.children [
+            canvas model
+            Html.div [ prop.className "hud hud-top"; prop.children [ telemetry model; canvasTools model dispatch ] ]
+            liveDelay model dispatch
+            canvasWatermark model
+        ]
+    ]
 
 let private canvasPane (model: Model) (dispatch: Msg -> unit) =
     Html.section [
         prop.className "canvas-pane"
-        prop.children [
-            Html.div [
-                prop.className "canvas-surface"
-                prop.children [
-                    canvas model
-                    Html.div [ prop.className "hud hud-top"; prop.children [ telemetry model; canvasTools model dispatch ] ]
-                    liveDelay model dispatch
-                    canvasWatermark model
-                ]
-            ]
-        ]
+        prop.children [ CanvasSurface model dispatch ]
     ]
 
 // ---------------------------------------------------------------------------

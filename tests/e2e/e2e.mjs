@@ -211,6 +211,18 @@ try {
   check('Zoom in updates the label', await until(async () => (await text(p1, '.zoom-value')) === '115%'))
   await p1.click('[data-testid="zoom-reset"]')
   check('Zoom reset restores 100%', await until(async () => (await text(p1, '.zoom-value')) === '100%'))
+  const surface = await p1.$eval('.canvas-surface', el => {
+    const r = el.getBoundingClientRect()
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+  })
+  await p1.mouse.move(surface.x, surface.y)
+  await p1.mouse.wheel({ deltaY: -120 })
+  check('Scroll wheel zooms in', await until(async () => parseFloat((await text(p1, '.zoom-value')) ?? '0') > 100))
+  const zoomedIn = parseFloat((await text(p1, '.zoom-value')) ?? '100')
+  await sleep(120)
+  await p1.mouse.wheel({ deltaY: 120 })
+  check('Scroll wheel zooms out', await until(async () => parseFloat((await text(p1, '.zoom-value')) ?? '999') < zoomedIn))
+  await p1.click('[data-testid="zoom-reset"]')
   const turtleBefore = await count(p1, 'svg.canvas polygon')
   await p1.click('[data-testid="turtle-toggle"]')
   check('Turtle can be hidden', await until(async () => (await count(p1, 'svg.canvas polygon')) < turtleBefore))

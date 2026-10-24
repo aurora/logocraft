@@ -11,7 +11,7 @@ There is no database and no user management: each browser stores its rooms local
 ## Features
 
 - **LogoCraft Studio UI** — dark IDE workspace with sidebar, editor tabs, telemetry HUD,
-  canvas zoom, turtle/grid toggles and a room settings panel.
+  canvas zoom (buttons and scroll wheel), turtle/grid toggles and a room settings panel.
 - **Animated drawing** — reveal the drawing segment by segment while the turtle moves along the
   paths. Toggle *Animate* in the canvas toolbar or replay the current drawing with the play
   button; the playback speed is adjustable from 0.25× to 4×. Animation and live run are

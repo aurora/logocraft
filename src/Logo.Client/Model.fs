@@ -119,6 +119,7 @@ type Msg =
     | ToggleGrid
     | ZoomIn
     | ZoomOut
+    | ZoomBy of int
     | ZoomReset
     | SetLiveDelay of int
     | StatusChanged of string
@@ -415,6 +416,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     | ToggleGrid -> { model with ShowGrid = not model.ShowGrid }, Cmd.none
     | ZoomIn -> { model with Zoom = min 200 (model.Zoom + 15) }, Cmd.none
     | ZoomOut -> { model with Zoom = max 50 (model.Zoom - 15) }, Cmd.none
+    | ZoomBy delta -> { model with Zoom = max 50 (min 200 (model.Zoom + delta)) }, Cmd.none
     | ZoomReset -> { model with Zoom = 100 }, Cmd.none
     | SetLiveDelay ms -> { model with LiveDelayMs = max 20 (min 500 ms) }, Cmd.none
     | StatusChanged s ->

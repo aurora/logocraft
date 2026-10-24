@@ -274,6 +274,24 @@ export function pickLogoFile(onText) {
   input.click()
 }
 
+/**
+ * Zooms with the mouse wheel without scrolling the page.
+ * `onZoom` receives 1 (in) or -1 (out); events are lightly throttled.
+ */
+export function attachWheelZoom(element, onZoom) {
+  let last = 0
+  const handler = event => {
+    event.preventDefault()
+    if (event.deltaY === 0) return
+    const now = performance.now()
+    if (now - last < 60) return
+    last = now
+    onZoom(event.deltaY < 0 ? 1 : -1)
+  }
+  element.addEventListener('wheel', handler, { passive: false })
+  return () => element.removeEventListener('wheel', handler)
+}
+
 // ---------------------------------------------------------------------------
 // Editor
 // ---------------------------------------------------------------------------

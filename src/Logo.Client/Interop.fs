@@ -42,6 +42,11 @@ let createEditor (codeParent: HTMLElement) (notesParent: HTMLElement) (options: 
 [<Import("pickLogoFile", "./editor.js")>]
 let pickLogoFile (onText: Action<string>) : unit = jsNative
 
+/// Zooms with the mouse wheel without scrolling the page. Returns a dispose function.
+/// `onZoom` receives 1 (zoom in) or -1 (zoom out).
+[<Import("attachWheelZoom", "./editor.js")>]
+let attachWheelZoom (element: HTMLElement) (onZoom: Action<int>) : (unit -> unit) = jsNative
+
 /// The display name the user confirmed earlier (empty string on a first visit).
 [<Import("getStoredName", "./editor.js")>]
 let storedName () : string = jsNative

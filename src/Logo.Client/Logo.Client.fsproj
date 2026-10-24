@@ -8,6 +8,8 @@
     <Compile Include="Interop.fs" />
     <Compile Include="Rooms.fs" />
     <Compile Include="Examples.fs" />
+    <Compile Include="Model.fs" />
+    <Compile Include="View.fs" />
     <Compile Include="App.fs" />
   </ItemGroup>
 

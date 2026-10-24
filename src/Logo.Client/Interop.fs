@@ -1,4 +1,4 @@
-/// Anbindung an `editor.js` (CodeMirror 6 + Yjs).
+/// Bridge to `editor.js` (CodeMirror 6 + Yjs).
 module Logo.Client.Interop
 
 open System
@@ -7,29 +7,41 @@ open Browser.Types
 
 type EditorOptions =
     { room: string
-      /// Namen aller Primitive, für Highlighting und Vervollständigung
+      /// Names of all primitives, for highlighting and completion
       primitives: string[]
-      /// Startprogramm, falls der Raum noch leer ist
+      /// Start program if the room is still empty
       seedText: string
+      /// Start content for the shared notes tab if it is still empty
+      notesSeed: string
       onChange: Action<string>
       onRun: Action
       onStatus: Action<string>
       onPeers: Action<string[], string[], int> }
 
 type EditorHandle =
-    /// Ersetzt den gemeinsamen Text (für alle Mitwirkenden)
+    /// Replaces the shared code for all contributors
     abstract setText: string -> unit
-    /// Markiert eine Zeile (1-basiert) als fehlerhaft, 0 entfernt die Markierung
+    /// Marks a line (1-based) as erroneous; 0 removes the marker
     abstract setErrorLine: int -> unit
+    /// Re-measures the newly visible editor after switching tabs
+    abstract setEditorTab: string -> unit
+    /// Changes the debounce used for reporting code changes ("live delay")
+    abstract setChangeDelay: int -> unit
+    abstract exportSvg: string -> unit
+    abstract exportPng: string -> unit
     abstract destroy: unit -> unit
 
 [<Import("createEditor", "./editor.js")>]
-let createEditor (parent: HTMLElement) (options: EditorOptions) : EditorHandle = jsNative
+let createEditor (codeParent: HTMLElement) (notesParent: HTMLElement) (options: EditorOptions) : EditorHandle = jsNative
 
-/// Löscht die lokal (IndexedDB) gespeicherten Inhalte eines Raums. Danach wird `onDone` aufgerufen.
-/// Der Raum darf dafür nicht mehr geöffnet sein (Editor vorher `destroy`en).
+/// Opens a file picker and calls `onText` with the selected UTF-8 text file.
+[<Import("pickLogoFile", "./editor.js")>]
+let pickLogoFile (onText: Action<string>) : unit = jsNative
+
+/// Deletes the locally (IndexedDB) stored content of a room. `onDone` is called afterwards.
+/// The room must not be open anymore (destroy the editor first).
 [<Import("deleteRoomData", "./editor.js")>]
 let deleteRoomData (room: string) (onDone: Action) : unit = jsNative
 
-/// Der aktuell geöffnete Editor (es gibt nur einen).
+/// The currently open editor (there is only one).
 let mutable current: EditorHandle option = None

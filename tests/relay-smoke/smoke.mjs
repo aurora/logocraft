@@ -1,5 +1,5 @@
-// Rauchtest für den Yjs-Relay (Logo.Server) mit echten y-websocket-Clients.
-// Voraussetzung: Server läuft (Standard: ws://localhost:5030/ws, überschreibbar mit LOGO_WS).
+// Smoke test for the Yjs relay (Logo.Server) with real y-websocket clients.
+// Prerequisite: server is running (default ws://localhost:5030/ws, override with LOGO_WS).
 import * as Y from 'yjs'
 import { WebsocketProvider } from 'y-websocket'
 import WebSocket from 'ws'
@@ -29,47 +29,47 @@ const waitSynced = async (c, ms = 3000) => {
 
 const names = c => [...c.provider.awareness.getStates().values()].map(s => s.user?.name).filter(Boolean).sort()
 
-// A verbindet sich und schreibt
+// A connects and writes
 const a = client('A')
-check('A wird synced (Server antwortet mit leerem SyncStep2)', await waitSynced(a))
+check('A is synced (server replies with an empty SyncStep2)', await waitSynced(a))
 a.text.insert(0, 'fd 100')
 
-// B verbindet sich später und sieht den Text
+// B connects later and sees the text
 const b = client('B')
-check('B wird synced', await waitSynced(b))
+check('B is synced', await waitSynced(b))
 await sleep(300)
-check('B sieht den Text von A', b.text.toString() === 'fd 100')
+check('B sees the text from A', b.text.toString() === 'fd 100')
 
-// Änderungen in beide Richtungen
+// Changes in both directions
 b.text.insert(b.text.length, ' rt 90')
 await sleep(300)
-check('A sieht die Änderung von B', a.text.toString() === 'fd 100 rt 90')
+check('A sees the change from B', a.text.toString() === 'fd 100 rt 90')
 
-// Awareness (Name/Cursor): beide sehen sich gegenseitig, auch der Spätere sieht den Früheren
-check('B sieht A und sich selbst in Awareness', names(b).join() === 'A,B')
-check('A sieht B und sich selbst in Awareness', names(a).join() === 'A,B')
+// Awareness (name/cursor): both see each other, including the later client
+check('B sees A and itself in awareness', names(b).join() === 'A,B')
+check('A sees B and itself in awareness', names(a).join() === 'A,B')
 
-// Alle gehen -> Server behält den Stand im Speicher; C bekommt ihn per Replay
+// Everyone leaves -> the server keeps the state in memory; C receives it via replay
 a.provider.destroy()
 b.provider.destroy()
 await sleep(300)
 const c = client('C')
-check('C wird synced', await waitSynced(c))
+check('C is synced', await waitSynced(c))
 await sleep(300)
-check('C bekommt den Stand, obwohl A und B weg sind', c.text.toString() === 'fd 100 rt 90')
+check('C receives the state even though A and B are gone', c.text.toString() === 'fd 100 rt 90')
 
-// Weggang wird bei den anderen sichtbar (Awareness-Entfernung durch den Server)
+// A disconnect becomes visible to the others (the server removes the awareness entry)
 const d = client('D')
 await waitSynced(d)
 await sleep(300)
-check('C und D sehen sich', names(c).join() === 'C,D')
+check('C and D see each other', names(c).join() === 'C,D')
 d.provider.ws.close()
 d.provider.shouldConnect = false
 await sleep(500)
-check('D verschwindet bei C sofort nach dem Verbindungsabbruch', names(c).join() === 'C')
+check('D disappears from C immediately after the connection drops', names(c).join() === 'C')
 
-// Echo-Race: Ein Client spiegelt den Eintrag eines bereits gegangenen Clients zurück.
-// Der Server darf daraus keinen Phantom-Eintrag machen, den spätere Clients sehen.
+// Echo race: a client mirrors the entry of a client that has already left.
+// The server must not turn this into a phantom entry that later clients see.
 {
   const { Awareness, encodeAwarenessUpdate } = await import('y-protocols/awareness')
   const encoding = await import('lib0/encoding')
@@ -86,7 +86,7 @@ check('D verschwindet bei C sofort nach dem Verbindungsabbruch', names(c).join()
     return encoding.toUint8Array(enc)
   }
   const ghost = new Awareness(new Y.Doc())
-  ghost.setLocalStateField('user', { name: 'Geist' })
+  ghost.setLocalStateField('user', { name: 'Ghost' })
   const echoer = new Awareness(new Y.Doc())
   echoer.setLocalStateField('user', { name: 'Echo' })
 
@@ -94,27 +94,27 @@ check('D verschwindet bei C sofort nach dem Verbindungsabbruch', names(c).join()
   const wsEcho = await raw()
   wsGhost.send(awarenessMessage(ghost, [ghost.clientID]))
   await sleep(200)
-  // Echo-Client bekommt die Nachricht des Geists weitergeleitet ...
+  // The echo client receives the ghost message forwarded ...
   const ghostMsg = awarenessMessage(ghost, [ghost.clientID])
   wsGhost.close()
   await sleep(300)
-  // ... und spiegelt sie nach dem Weggang des Geists noch einmal zurück
+  // ... and mirrors it back again after the ghost has left
   wsEcho.send(awarenessMessage(echoer, [echoer.clientID]))
   wsEcho.send(ghostMsg)
   await sleep(200)
 
   const late = new Y.Doc()
   const lateProvider = new WebsocketProvider(url, room + '-echo', late, { WebSocketPolyfill: WebSocket, disableBc: true })
-  lateProvider.awareness.setLocalStateField('user', { name: 'Spät' })
+  lateProvider.awareness.setLocalStateField('user', { name: 'Late' })
   await waitSynced({ provider: lateProvider })
   await sleep(300)
   const seen = [...lateProvider.awareness.getStates().values()].map(s => s.user?.name).filter(Boolean).sort().join()
-  check('Echo eines gegangenen Clients erzeugt keinen Phantom-Eintrag', seen === 'Echo,Spät', `(gesehen: ${seen})`)
+  check('An echo from a departed client creates no phantom entry', seen === 'Echo,Late', `(seen: ${seen})`)
   lateProvider.destroy()
   wsEcho.close()
 }
 
-// Gleichzeitiges Seeding mit fester Client-ID erzeugt keine Duplikate
+// Concurrent seeding with a fixed client ID creates no duplicates
 const seedUpdate = text => {
   const s = new Y.Doc()
   s.clientID = 1
@@ -127,8 +127,8 @@ Y.applyUpdate(x, seedUpdate('Start'))
 Y.applyUpdate(y, seedUpdate('Start'))
 Y.applyUpdate(x, Y.encodeStateAsUpdate(y))
 Y.applyUpdate(y, Y.encodeStateAsUpdate(x))
-check('Seeding mit fester Client-ID dupliziert nicht', x.getText('code').toString() === 'Start' && y.getText('code').toString() === 'Start')
+check('Seeding with a fixed client ID does not duplicate', x.getText('code').toString() === 'Start' && y.getText('code').toString() === 'Start')
 
 c.provider.destroy()
-console.log(failed === 0 ? '\nAlles in Ordnung' : `\n${failed} Prüfung(en) fehlgeschlagen`)
+console.log(failed === 0 ? '\nAll good' : `\n${failed} check(s) failed`)
 process.exit(failed === 0 ? 0 : 1)

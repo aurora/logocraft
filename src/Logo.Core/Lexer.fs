@@ -71,7 +71,7 @@ let tokenize (src: string) : Token[] =
                 i <- i + 1
             let name = src.Substring(start, i - start).ToLowerInvariant()
             if name = "" then
-                raise (LogoError(line, "Nach ':' fehlt ein Variablenname"))
+                raise (LogoError(line, "Missing variable name after ':'"))
             toks.Add { Kind = TVar name; Line = line }
         elif isDigit c || (c = '.' && i + 1 < n && isDigit src.[i + 1]) then
             let start = i
@@ -80,7 +80,7 @@ let tokenize (src: string) : Token[] =
             let text = src.Substring(start, i - start)
             match tryParseNumber text with
             | Some v -> toks.Add { Kind = TNumber v; Line = line }
-            | None -> raise (LogoError(line, sprintf "'%s' ist keine gültige Zahl" text))
+            | None -> raise (LogoError(line, sprintf "'%s' is not a valid number" text))
         else
             let start = i
             while i < n

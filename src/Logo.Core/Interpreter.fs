@@ -373,14 +373,14 @@ type private Machine() =
         | VWord w ->
             match Lexer.tryParseNumber w with
             | Some n -> n
-            | None -> fail (sprintf "'%s' ist keine Zahl" w)
-        | VList _ -> fail "Eine Liste ist keine Zahl"
+            | None -> fail (sprintf "'%s' is not a number" w)
+        | VList _ -> fail "A list is not a number"
 
     let toBool (v: Value) : bool =
         match v with
         | VWord w when wordsEqual w "true" -> true
         | VWord w when wordsEqual w "false" -> false
-        | _ -> fail (sprintf "'%s' ist weder true noch false" (showValue v))
+        | _ -> fail (sprintf "'%s' is neither true nor false" (showValue v))
 
     let normalizeAngle (a: float) =
         let r = a % 360.0
@@ -399,7 +399,7 @@ type private Machine() =
             current.Add((nx, ny, nz))
             pointCount <- pointCount + 1
             if pointCount > maxPoints then
-                fail "Die Zeichnung ist zu groß (zu viele Linien)"
+                fail "The drawing is too large (too many lines)"
         else
             flush ()
         x <- nx
@@ -505,7 +505,7 @@ type private Machine() =
         match v with
         | VNum n ->
             let i = int (Math.Round n)
-            if i >= 0 && i < palette.Length then palette.[i] else fail (sprintf "Unbekannte Farbnummer %d (erlaubt: 0-15)" i)
+            if i >= 0 && i < palette.Length then palette.[i] else fail (sprintf "Unknown color number %d (allowed: 0-15)" i)
         | VWord w ->
             let name = w.ToLowerInvariant()
             match Map.tryFind name namedColors with
@@ -514,13 +514,13 @@ type private Machine() =
                 match Lexer.tryParseNumber name with
                 | Some n ->
                     let i = int (Math.Round n)
-                    if i >= 0 && i < palette.Length then palette.[i] else fail (sprintf "Unbekannte Farbnummer %d (erlaubt: 0-15)" i)
+                    if i >= 0 && i < palette.Length then palette.[i] else fail (sprintf "Unknown color number %d (allowed: 0-15)" i)
                 | None ->
-                    if isHexColor name || isPlainName name then name else fail (sprintf "Unbekannte Farbe '%s'" w)
+                    if isHexColor name || isPlainName name then name else fail (sprintf "Unknown color '%s'" w)
         | VList [ r; g; b ] ->
             let c (v: Value) = int (Math.Round(Math.Max(0.0, Math.Min(100.0, num v)) * 2.55))
             sprintf "rgb(%d,%d,%d)" (c r) (c g) (c b)
-        | VList _ -> fail "Eine Farbe als Liste braucht drei Werte [rot grün blau] (0-100)"
+        | VList _ -> fail "A color list needs three values [red green blue] (0-100)"
 
     let tryGetVar (name: string) : Value option =
         let mutable result : Value option = None
@@ -601,26 +601,26 @@ type private Machine() =
             | Some v ->
                 fail (
                     sprintf
-                        "'%s' liefert %s, aber damit passiert nichts (fehlt z. B. print oder fd?)"
+                        "'%s' returns %s, but nothing happens with it (missing print or fd?)"
                         name
                         (showValue v)
                 )
-        | _ -> fail (sprintf "Ich weiß nicht, was ich mit '%s' tun soll" (tokenText t))
+        | _ -> fail (sprintf "I don't know what to do with '%s'" (tokenText t))
 
     /// Wertet eine Liste als einzelnen Ausdruck aus (für while-Bedingungen).
     member m.EvalList(items: Value list) : Value =
         let cur = Cursor(valuesToTokens line items |> List.toArray)
         if cur.AtEnd then
-            fail "Leerer Ausdruck"
+            fail "Empty expression"
         let v = m.EvalExpr cur
         if not cur.AtEnd then
-            fail (sprintf "Unerwartet: '%s'" (tokenText cur.Peek.Value))
+            fail (sprintf "Unexpected: '%s'" (tokenText cur.Peek.Value))
         v
 
     member m.CallProc(p: ProcDef, args: Value list) : Value option =
         depth <- depth + 1
         if depth > maxDepth then
-            fail (sprintf "Rekursion zu tief (mehr als %d Ebenen) in '%s'" maxDepth p.Name)
+            fail (sprintf "Recursion too deep (more than %d levels) in '%s'" maxDepth p.Name)
         let frame = Dictionary<string, Value>()
         List.iter2 (fun (n: string) v -> frame.[n] <- v) p.Params args
         frames.Add frame
@@ -636,13 +636,13 @@ type private Machine() =
 
     member m.EvalArg(cur: Cursor, forName: string) : Value =
         if cur.AtEnd then
-            fail (sprintf "'%s' braucht noch eine Eingabe" forName)
+            fail (sprintf "'%s' needs another input" forName)
         m.EvalExpr cur
 
     member m.CallWord(name: string, cur: Cursor) : Value option =
         steps <- steps + 1
         if steps > maxSteps then
-            fail "Zu viele Rechenschritte – Endlosschleife?"
+            fail "Too many steps — infinite loop?"
         match procs.TryGetValue name with
         | true, p ->
             let args = [ for _ in p.Params -> m.EvalArg(cur, name) ]
@@ -653,7 +653,7 @@ type private Machine() =
             | Some n ->
                 let args = [ for _ in 1..n -> m.EvalArg(cur, name) ]
                 m.Apply(prim, args)
-            | None -> fail (sprintf "Ich weiß nicht, wie man '%s' macht" name)
+            | None -> fail (sprintf "I don't know how to do '%s'" name)
 
     // -- Ausdrücke -----------------------------------------------------------
 
@@ -704,13 +704,13 @@ type private Machine() =
                 cur.Next() |> ignore
                 let d = num (m.EvalUnary cur)
                 if d = 0.0 then
-                    fail "Division durch 0"
+                    fail "Division by zero"
                 left <- VNum(num left / d)
             | Some { Kind = TOp "%" } ->
                 cur.Next() |> ignore
                 let d = num (m.EvalUnary cur)
                 if d = 0.0 then
-                    fail "Division durch 0"
+                    fail "Division by zero"
                 left <- VNum(num left % d)
             | _ -> go <- false
         left
@@ -725,7 +725,7 @@ type private Machine() =
 
     member m.EvalPrimary(cur: Cursor) : Value =
         if cur.AtEnd then
-            fail "Hier fehlt ein Wert"
+            fail "A value is missing here"
         let t = cur.Next()
         if t.Line > 0 then
             line <- t.Line
@@ -735,7 +735,7 @@ type private Machine() =
         | TVar v ->
             match tryGetVar v with
             | Some value -> value
-            | None -> fail (sprintf "Die Variable ':%s' hat keinen Wert" v)
+            | None -> fail (sprintf "Variable ':%s' has no value" v)
         | TLBracket -> m.ReadList cur
         | TOp "(" ->
             let v = m.EvalExpr cur
@@ -743,13 +743,13 @@ type private Machine() =
             | Some { Kind = TOp ")" } ->
                 cur.Next() |> ignore
                 v
-            | _ -> fail "Schließende Klammer ')' fehlt"
+            | _ -> fail "Missing closing ')'"
         | TWord name ->
             match m.CallWord(name, cur) with
             | Some v -> v
-            | None -> fail (sprintf "'%s' liefert keinen Wert" name)
-        | TRBracket -> fail "Unerwartetes ']'"
-        | TOp o -> fail (sprintf "Unerwarteter Operator '%s'" o)
+            | None -> fail (sprintf "'%s' does not return a value" name)
+        | TRBracket -> fail "Unexpected ']'"
+        | TOp o -> fail (sprintf "Unexpected operator '%s'" o)
 
     /// Liest eine Liste bis zur passenden ']' (die öffnende wurde bereits konsumiert).
     member m.ReadList(cur: Cursor) : Value =
@@ -757,7 +757,7 @@ type private Machine() =
         let mutable closed = false
         while not closed do
             if cur.AtEnd then
-                fail "Schließende Klammer ']' fehlt"
+                fail "Missing closing ']'"
             let t = cur.Next()
             match t.Kind with
             | TRBracket -> closed <- true
@@ -877,7 +877,7 @@ type private Machine() =
                            (x + r * (fx * c + rx * s), y + r * (fy * c + ry * s), z + r * (fz * c + rz * s)) |]
                 pointCount <- pointCount + pts.Length
                 if pointCount > maxPoints then
-                    fail "Die Zeichnung ist zu groß (zu viele Linien)"
+                    fail "The drawing is too large (too many lines)"
                 paths.Add { Color = color; Width = width; Points = pts }
             None
         // Ausgabe
@@ -893,7 +893,7 @@ type private Machine() =
         | "make", [ VWord name; v ] ->
             setVar (name.ToLowerInvariant()) v
             None
-        | "make", _ -> fail "make braucht einen Namen in Anführungszeichen, z. B. make \"x 10"
+        | "make", _ -> fail "make needs a quoted name, e.g. make \"x 10"
         | "local", [ VWord name ] ->
             if frames.Count > 0 then
                 frames.[frames.Count - 1].[name.ToLowerInvariant()] <- VList []
@@ -911,39 +911,39 @@ type private Machine() =
                 i <- i + 1
             repeatCounts.RemoveAt slot
             None
-        | "repeat", _ -> fail "repeat erwartet eine Zahl und eine Liste: repeat 4 [fd 50 rt 90]"
+        | "repeat", _ -> fail "repeat expects a number and a list: repeat 4 [fd 50 rt 90]"
         | "repcount", [] -> Some(VNum(if repeatCounts.Count > 0 then float repeatCounts.[repeatCounts.Count - 1] else -1.0))
         | "if", [ c; VList body ] ->
             if toBool c then
                 m.ExecList body
             None
-        | "if", _ -> fail "if erwartet eine Bedingung und eine Liste: if :x > 3 [fd 10]"
+        | "if", _ -> fail "if expects a condition and a list: if :x > 3 [fd 10]"
         | "ifelse", [ c; VList yes; VList no ] ->
             m.ExecList(if toBool c then yes else no)
             None
-        | "ifelse", _ -> fail "ifelse erwartet eine Bedingung und zwei Listen: ifelse :x > 3 [fd 10] [bk 10]"
+        | "ifelse", _ -> fail "ifelse expects a condition and two lists: ifelse :x > 3 [fd 10] [bk 10]"
         | "while", [ VList cond; VList body ] ->
             let toks = valuesToTokens line body |> List.toArray
             while noSignal () && toBool (m.EvalList cond) do
                 steps <- steps + 1
                 if steps > maxSteps then
-                    fail "Zu viele Rechenschritte – Endlosschleife?"
+                    fail "Too many steps — infinite loop?"
                 m.Exec toks
             None
-        | "while", _ -> fail "while erwartet zwei Listen: while [:i < 10] [make \"i :i + 1]"
+        | "while", _ -> fail "while expects two lists: while [:i < 10] [make \"i :i + 1]"
         | "for", [ VList spec; VList body ] ->
             match spec with
             | VWord var :: rest ->
                 let cur = Cursor(valuesToTokens line rest |> List.toArray)
                 if cur.AtEnd then
-                    fail "for [i start ende] braucht Start- und Endwert"
+                    fail "for [i start end] needs a start and end value"
                 let start = num (m.EvalExpr cur)
                 if cur.AtEnd then
-                    fail "for [i start ende] braucht einen Endwert"
+                    fail "for [i start end] needs an end value"
                 let limit = num (m.EvalExpr cur)
                 let step = if cur.AtEnd then (if limit >= start then 1.0 else -1.0) else num (m.EvalExpr cur)
                 if step = 0.0 then
-                    fail "Die Schrittweite bei for darf nicht 0 sein"
+                    fail "The for step size must not be 0"
                 let name = var.ToLowerInvariant()
                 let count = Math.Floor((limit - start) / step) + 1.0
                 let toks = valuesToTokens line body |> List.toArray
@@ -956,12 +956,12 @@ type private Machine() =
                     k <- k + 1.0
                 frames.RemoveAt(frames.Count - 1)
                 None
-            | _ -> fail "for erwartet [variable start ende] als erste Liste"
-        | "for", _ -> fail "for erwartet zwei Listen: for [i 1 10] [fd :i]"
+            | _ -> fail "for expects [variable start end] as its first list"
+        | "for", _ -> fail "for expects two lists: for [i 1 10] [fd :i]"
         | "run", [ VList items ] ->
             m.ExecList items
             None
-        | "run", _ -> fail "run erwartet eine Liste"
+        | "run", _ -> fail "run expects a list"
         | "stop", [] ->
             signal <- StopSignal
             None
@@ -975,12 +975,12 @@ type private Machine() =
         | "quotient", [ a; b ] ->
             let d = num b
             if d = 0.0 then
-                fail "Division durch 0"
+                fail "Division by zero"
             Some(VNum(num a / d))
         | "remainder", [ a; b ] ->
             let d = num b
             if d = 0.0 then
-                fail "Division durch 0"
+                fail "Division by zero"
             Some(VNum(num a % d))
         | "minus", [ a ] -> Some(VNum(-(num a)))
         | "abs", [ a ] -> Some(VNum(Math.Abs(num a)))
@@ -989,7 +989,7 @@ type private Machine() =
         | "sqrt", [ a ] ->
             let v = num a
             if v < 0.0 then
-                fail "Die Wurzel einer negativen Zahl ist nicht definiert"
+                fail "The square root of a negative number is not defined"
             Some(VNum(Math.Sqrt v))
         | "power", [ a; b ] -> Some(VNum(Math.Pow(num a, num b)))
         | "sin", [ a ] -> Some(VNum(Math.Sin(toRad (num a))))
@@ -999,7 +999,7 @@ type private Machine() =
         | "random", [ a ] ->
             let n = Math.Floor(num a)
             if n < 1.0 then
-                fail "random braucht eine Zahl größer als 0"
+                fail "random needs a number greater than 0"
             Some(VNum(nextRandom n))
         | "rerandom", [ a ] ->
             // Startwert setzen: dasselbe Programm liefert mit demselben Startwert dieselben Zufallszahlen
@@ -1023,34 +1023,34 @@ type private Machine() =
         | "list", [ a; b ] -> Some(VList [ a; b ])
         | "fput", [ a; VList l ] -> Some(VList(a :: l))
         | "lput", [ a; VList l ] -> Some(VList(l @ [ a ]))
-        | ("fput" | "lput"), _ -> fail (sprintf "%s braucht eine Liste als zweite Eingabe" prim)
+        | ("fput" | "lput"), _ -> fail (sprintf "%s needs a list as its second input" prim)
         | "first", [ v ] ->
             match itemsOf v with
             | h :: _ -> Some h
-            | [] -> fail "first: leere Liste"
+            | [] -> fail "first: empty list"
         | "last", [ v ] ->
             match itemsOf v with
-            | [] -> fail "last: leere Liste"
+            | [] -> fail "last: empty list"
             | l -> Some(List.last l)
         | "butfirst", [ v ] ->
             match v, itemsOf v with
-            | _, [] -> fail "butfirst: leere Liste"
+            | _, [] -> fail "butfirst: empty list"
             | VList _, _ :: t -> Some(VList t)
             | _, _ :: t -> Some(VWord(t |> List.map (formatValue false) |> String.concat ""))
         | "butlast", [ v ] ->
             match v, itemsOf v with
-            | _, [] -> fail "butlast: leere Liste"
+            | _, [] -> fail "butlast: empty list"
             | VList _, l -> Some(VList(List.take (l.Length - 1) l))
             | _, l -> Some(VWord(List.take (l.Length - 1) l |> List.map (formatValue false) |> String.concat ""))
         | "item", [ i; v ] ->
             let idx = int (Math.Floor(num i))
             let l = itemsOf v
             if idx < 1 || idx > l.Length then
-                fail (sprintf "item: Index %d außerhalb der Liste (1-%d)" idx l.Length)
+                fail (sprintf "item: index %d out of range (1-%d)" idx l.Length)
             Some(List.item (idx - 1) l)
         | "count", [ v ] -> Some(VNum(float (List.length (itemsOf v))))
         | "emptyp", [ v ] -> Some(mkBool (List.isEmpty (itemsOf v)))
-        | _ -> fail (sprintf "'%s' wurde mit falschen Eingaben aufgerufen" prim)
+        | _ -> fail (sprintf "'%s' was called with wrong inputs" prim)
 
 // ---------------------------------------------------------------------------
 // Einstieg
@@ -1072,9 +1072,9 @@ let private splitProgram (toks: Token[]) : ProcDef list * Token[] =
                     | TWord w ->
                         i <- i + 1
                         w
-                    | _ -> raise (LogoError(startLine, "Nach 'to' fehlt der Name der Prozedur"))
+                    | _ -> raise (LogoError(startLine, "Missing procedure name after 'to'"))
                 else
-                    raise (LogoError(startLine, "Nach 'to' fehlt der Name der Prozedur"))
+                    raise (LogoError(startLine, "Missing procedure name after 'to'"))
             let ps = ResizeArray<string>()
             let mutable collecting = true
             while collecting && i < toks.Length do
@@ -1087,7 +1087,7 @@ let private splitProgram (toks: Token[]) : ProcDef list * Token[] =
             let mutable closed = false
             while not closed do
                 if i >= toks.Length then
-                    raise (LogoError(startLine, sprintf "Zu 'to %s' fehlt das abschließende 'end'" name))
+                    raise (LogoError(startLine, sprintf "'to %s' is missing the closing 'end'" name))
                 match toks.[i].Kind with
                 | TWord "end" ->
                     closed <- true
@@ -1101,22 +1101,61 @@ let private splitProgram (toks: Token[]) : ProcDef list * Token[] =
             i <- i + 1
     List.ofSeq procs, main.ToArray()
 
-/// Führt ein Logo-Programm aus und liefert Zeichnung, Ausgabe und ggf. einen Fehler.
-let run (source: string) : RunResult =
-    let m = Machine()
-    let error =
+/// Result of a single REPL command. `Paths` and `Output` are the full state since the last
+/// `Session.Run`; `NewOutput` contains only what this command produced.
+type ReplResult =
+    { Paths: Path[]
+      Turtle: TurtleState
+      Output: string[]
+      NewOutput: string[]
+      Error: ErrorInfo option
+      Steps: int }
+
+/// Stateful interpreter for the interactive REPL. Unlike `run`, the machine (turtle position,
+/// globals and procedures) survives between `Exec` calls.
+type Session() =
+    let mutable machine = Machine()
+    let mutable outputCount = 0
+
+    let execute (source: string) : ErrorInfo option =
         try
             let toks = Lexer.tokenize source
             let defs, main = splitProgram toks
             for d in defs do
-                m.Define d
-            m.Exec main
+                machine.Define d
+            machine.Exec main
             None
         with
         | LogoError(line, msg) -> Some { Line = line; Message = msg }
-        | ex -> Some { Line = m.CurrentLine; Message = "Interner Fehler: " + ex.Message }
-    { Paths = m.Paths
-      Turtle = m.Turtle
-      Output = m.Output
-      Error = error
-      Steps = m.Steps }
+        | ex -> Some { Line = machine.CurrentLine; Message = "Internal error: " + ex.Message }
+
+    member _.Reset() =
+        machine <- Machine()
+        outputCount <- 0
+
+    /// Resets the machine and runs a complete program.
+    member s.Run(source: string) : RunResult =
+        s.Reset()
+        let error = execute source
+        { Paths = machine.Paths
+          Turtle = machine.Turtle
+          Output = machine.Output
+          Error = error
+          Steps = machine.Steps }
+
+    /// Executes another command on the existing machine (turtle, variables and procedures persist).
+    member _.Exec(source: string) : ReplResult =
+        let error = execute source
+        let output = machine.Output
+        let newOutput =
+            if output.Length >= outputCount then output.[outputCount..] else output
+        outputCount <- output.Length
+        { Paths = machine.Paths
+          Turtle = machine.Turtle
+          Output = output
+          NewOutput = newOutput
+          Error = error
+          Steps = machine.Steps }
+
+/// Runs a Logo program and returns drawing, output and an optional error.
+let run (source: string) : RunResult = Session().Run source

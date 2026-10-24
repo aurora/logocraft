@@ -1,5 +1,5 @@
-// Dünne Anbindung von CodeMirror 6 und Yjs für die F#/Fable-Anwendung.
-// Die gesamte Anwendungslogik (Zustand, Interpreter, UI) liegt in F# (siehe App.fs).
+// Thin bridge between CodeMirror 6, Yjs and the F#/Fable application.
+// All application logic (state, interpreter, UI) lives in F# (see Model.fs and View.fs).
 
 import { EditorState, StateEffect, StateField } from '@codemirror/state'
 import {
@@ -11,6 +11,7 @@ import {
 } from '@codemirror/language'
 import { defaultKeymap, indentWithTab } from '@codemirror/commands'
 import { closeBrackets, closeBracketsKeymap, autocompletion } from '@codemirror/autocomplete'
+import { markdown } from '@codemirror/lang-markdown'
 import { tags as t } from '@lezer/highlight'
 import * as Y from 'yjs'
 import { WebsocketProvider } from 'y-websocket'
@@ -18,7 +19,7 @@ import { IndexeddbPersistence } from 'y-indexeddb'
 import { yCollab, yUndoManagerKeymap } from 'y-codemirror.next'
 
 // ---------------------------------------------------------------------------
-// Syntax-Highlighting für LOGO (CodeMirror liefert keinen Logo-Modus mit)
+// LOGO syntax highlighting (CodeMirror ships no Logo mode)
 // ---------------------------------------------------------------------------
 
 const CONTROL = new Set([
@@ -54,19 +55,30 @@ function logoLanguage(primitives) {
 }
 
 const logoHighlight = HighlightStyle.define([
-  { tag: t.keyword, color: '#7c3aed', fontWeight: '600' },
-  { tag: t.standard(t.variableName), color: '#2563eb' },
-  { tag: t.definition(t.variableName), color: '#b45309', fontWeight: '700' },
-  { tag: t.local(t.variableName), color: '#0f766e' },
-  { tag: t.string, color: '#c2410c' },
-  { tag: t.number, color: '#0e7490' },
-  { tag: t.comment, color: '#6b7280', fontStyle: 'italic' },
-  { tag: t.operator, color: '#475569' },
-  { tag: t.bracket, color: '#475569' }
+  { tag: t.keyword, color: '#4cd7f6', fontWeight: '600' },
+  { tag: t.standard(t.variableName), color: '#acedff' },
+  { tag: t.definition(t.variableName), color: '#d0bcff', fontWeight: '700' },
+  { tag: t.local(t.variableName), color: '#6ffbbe' },
+  { tag: t.string, color: '#fbbf24' },
+  { tag: t.number, color: '#4cd7f6' },
+  { tag: t.comment, color: '#86948a', fontStyle: 'italic' },
+  { tag: t.operator, color: '#bbcabf' },
+  { tag: t.bracket, color: '#bbcabf' }
+])
+
+const markdownHighlight = HighlightStyle.define([
+  { tag: t.heading, color: '#d0bcff', fontWeight: '700' },
+  { tag: t.strong, color: '#dae2fd', fontWeight: '700' },
+  { tag: t.emphasis, color: '#acedff', fontStyle: 'italic' },
+  { tag: t.link, color: '#4cd7f6', textDecoration: 'underline' },
+  { tag: t.url, color: '#4edea3' },
+  { tag: t.monospace, color: '#6ffbbe' },
+  { tag: t.quote, color: '#bbcabf', fontStyle: 'italic' },
+  { tag: t.list, color: '#bbcabf' }
 ])
 
 // ---------------------------------------------------------------------------
-// Fehlerzeile markieren
+// Error line marker
 // ---------------------------------------------------------------------------
 
 const setErrorLineEffect = StateEffect.define()
@@ -91,7 +103,7 @@ const errorLineField = StateField.define({
 })
 
 // ---------------------------------------------------------------------------
-// Auto-Vervollständigung: Primitive + selbst definierte Prozeduren
+// Autocompletion: primitives + user-defined procedures
 // ---------------------------------------------------------------------------
 
 function completionSource(primitives) {
@@ -110,44 +122,44 @@ function completionSource(primitives) {
 }
 
 // ---------------------------------------------------------------------------
-// Identität der Mitwirkenden (nur für die Anzeige, keine Benutzerverwaltung)
+// Contributor identity (display only — there is no user management)
 // ---------------------------------------------------------------------------
 
-const ADJECTIVES = ['Flinke', 'Kluge', 'Neugierige', 'Fleißige', 'Gemütliche', 'Mutige', 'Verspielte', 'Leise']
-const ANIMALS = ['Schildkröte', 'Eule', 'Fuchs', 'Otter', 'Igel', 'Pinguin', 'Krake', 'Dachs']
+const ADJECTIVES = ['Swift', 'Clever', 'Curious', 'Busy', 'Calm', 'Brave', 'Playful', 'Quiet']
+const ANIMALS = ['Turtle', 'Owl', 'Fox', 'Otter', 'Hedgehog', 'Penguin', 'Octopus', 'Badger']
 const COLORS = ['#e11d48', '#2563eb', '#16a34a', '#d97706', '#9333ea', '#0891b2', '#db2777', '#4f46e5']
 
 function pick(list) { return list[Math.floor(Math.random() * list.length)] }
 
-// CodeMirror normalisiert Zeilenumbrüche intern auf \n. Der Yjs-Text muss dieselbe Form haben,
-// sonst weichen Positionen und Längen zwischen Editor und gemeinsamem Dokument voneinander ab.
+// CodeMirror normalizes line breaks to \n. The Yjs text must have the same form,
+// otherwise positions and lengths diverge between the editor and the shared document.
 const normalizeNewlines = text => text.replace(/\r\n?/g, '\n')
 
 function identity() {
   try {
     const stored = sessionStorage.getItem('logo-identity')
     if (stored) return JSON.parse(stored)
-  } catch { /* ignorieren */ }
+  } catch { /* ignore */ }
   const color = pick(COLORS)
   const id = { name: `${pick(ADJECTIVES)} ${pick(ANIMALS)}`, color, colorLight: color + '33' }
-  try { sessionStorage.setItem('logo-identity', JSON.stringify(id)) } catch { /* ignorieren */ }
+  try { sessionStorage.setItem('logo-identity', JSON.stringify(id)) } catch { /* ignore */ }
   return id
 }
 
 // ---------------------------------------------------------------------------
-// Lokale Speicherung (IndexedDB): pro Raum eine eigene Datenbank
+// Local persistence (IndexedDB): one database per room
 // ---------------------------------------------------------------------------
 
 const dbName = room => `logo-room-${room}`
 
-/** Löscht die lokalen Daten eines Raums und ruft danach `onDone` auf (auch bei Fehler/Blockade). */
+/** Deletes a room's local data and calls `onDone` afterwards (also on error/block). */
 export function deleteRoomData(room, onDone) {
   let finished = false
   const done = () => { if (!finished) { finished = true; onDone() } }
   try {
     const request = indexedDB.deleteDatabase(dbName(room))
     request.onsuccess = request.onerror = done
-    // Hält noch ein anderer Tab die Datenbank offen, wird erst später gelöscht -> nicht ewig warten
+    // If another tab keeps the database open, deletion happens later — don't wait forever.
     setTimeout(done, 1500)
   } catch {
     done()
@@ -155,69 +167,163 @@ export function deleteRoomData(room, onDone) {
 }
 
 // ---------------------------------------------------------------------------
+// Export helpers
+// ---------------------------------------------------------------------------
+
+const SVG_NS = 'http://www.w3.org/2000/svg'
+const CANVAS_BACKGROUND = '#0b1326'
+
+function canvasClone() {
+  const source = document.querySelector('svg.canvas')
+  if (!source) return null
+  const clone = source.cloneNode(true)
+  clone.setAttribute('xmlns', SVG_NS)
+  const box = (source.getAttribute('viewBox') || '0 0 600 600').trim().split(/\s+/).map(Number)
+  const width = box[2] || 600
+  const height = box[3] || 600
+  clone.setAttribute('width', String(width))
+  clone.setAttribute('height', String(height))
+  const background = document.createElementNS(SVG_NS, 'rect')
+  background.setAttribute('x', String(box[0] || 0))
+  background.setAttribute('y', String(box[1] || 0))
+  background.setAttribute('width', String(width))
+  background.setAttribute('height', String(height))
+  background.setAttribute('fill', CANVAS_BACKGROUND)
+  clone.insertBefore(background, clone.firstChild)
+  return { clone, width, height }
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+export function exportSvg(filename = 'logo-drawing.svg') {
+  const result = canvasClone()
+  if (!result) return
+  const source = new XMLSerializer().serializeToString(result.clone)
+  downloadBlob(new Blob([source], { type: 'image/svg+xml;charset=utf-8' }), filename)
+}
+
+export function exportPng(filename = 'logo-drawing.png') {
+  const result = canvasClone()
+  if (!result) return
+  const source = new XMLSerializer().serializeToString(result.clone)
+  const svgUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(source)
+  const image = new Image()
+  image.onload = () => {
+    const scale = 2
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(result.width * scale))
+    canvas.height = Math.max(1, Math.round(result.height * scale))
+    const context = canvas.getContext('2d')
+    if (!context) return
+    context.fillStyle = CANVAS_BACKGROUND
+    context.fillRect(0, 0, canvas.width, canvas.height)
+    context.drawImage(image, 0, 0, canvas.width, canvas.height)
+    canvas.toBlob(blob => { if (blob) downloadBlob(blob, filename) }, 'image/png')
+  }
+  image.src = svgUrl
+}
+
+/** Opens a file picker and returns the chosen text file's contents. */
+export function pickLogoFile(onText) {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.logo,.lgo,.txt,text/plain'
+  input.style.display = 'none'
+  input.addEventListener('change', () => {
+    const file = input.files && input.files[0]
+    if (!file) { input.remove(); return }
+    const reader = new FileReader()
+    reader.onload = () => {
+      try { onText(String(reader.result ?? '')) } finally { input.remove() }
+    }
+    reader.onerror = () => input.remove()
+    reader.readAsText(file)
+  })
+  document.body.appendChild(input)
+  input.click()
+}
+
+// ---------------------------------------------------------------------------
 // Editor
 // ---------------------------------------------------------------------------
 
 /**
- * @param {HTMLElement} parent
+ * @param {HTMLElement} codeParent
+ * @param {HTMLElement} notesParent
  * @param {{
  *   room: string,
  *   primitives: string[],
  *   seedText: string,
+ *   notesSeed: string,
  *   onChange: (text: string) => void,
  *   onRun: () => void,
  *   onStatus: (status: string) => void,
  *   onPeers: (names: string[], colors: string[], selfIndex: number) => void
  * }} opts
  */
-export function createEditor(parent, opts) {
+export function createEditor(codeParent, notesParent, opts) {
   const ydoc = new Y.Doc()
   const ytext = ydoc.getText('code')
+  const ynotes = ydoc.getText('notes')
 
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  // BroadcastChannel (Sync zwischen Tabs desselben Browsers) aus: alles läuft über den Server, der
-  // anhand der Verbindung weiß, wem welcher Awareness-Eintrag gehört und ihn beim Verlassen entfernen kann.
+  // BroadcastChannel (same-browser tab sync) is off: everything goes through the server,
+  // which knows which awareness entry belongs to a connection and removes it on disconnect.
   const provider = new WebsocketProvider(`${proto}://${location.host}/ws`, opts.room, ydoc, { disableBc: true })
   const awareness = provider.awareness
   const me = identity()
   awareness.setLocalStateField('user', me)
 
-  // --- Änderungen an F# melden (leicht entprellt) ---
+  // --- Report code changes to F# (lightly debounced) ---
+  let changeDelay = 150
   let timer = null
   const emitChange = () => opts.onChange(ytext.toString())
   ytext.observe(() => {
     clearTimeout(timer)
-    timer = setTimeout(emitChange, 150)
+    timer = setTimeout(emitChange, changeDelay)
   })
 
-  // --- Lokale Kopie im Browser (IndexedDB). Der Server ist nur Vermittler: Wer einen Raum schon
-  // einmal geöffnet hat, behält ihn, auch wenn der Server ihn vergessen hat (er wird beim Verbinden
-  // wieder zurücksynchronisiert).
+  // --- Local copy in the browser (IndexedDB). The server is only a relay: anyone who has
+  // opened a room keeps it even if the server forgot it (it syncs back on connect). ---
   let idbSynced = false
   let serverSynced = false
   let idbFallback = null
   try {
     const persistence = new IndexeddbPersistence(dbName(opts.room), ydoc)
     persistence.on('synced', () => { idbSynced = true; trySeed() })
-    // Ohne funktionierende IndexedDB (z. B. gesperrt) nicht ewig auf den lokalen Speicher warten
+    // Don't wait forever if IndexedDB is unavailable (e.g. blocked)
     idbFallback = setTimeout(() => { idbSynced = true; trySeed() }, 3000)
   } catch {
     idbSynced = true
   }
 
-  // --- Startinhalt: nur wenn der Raum nach dem Sync (Server und lokaler Speicher) noch leer ist.
-  // Alle Clients erzeugen dasselbe Update mit fester Client-ID, dadurch entstehen auch bei
-  // gleichzeitigem Beitritt keine Duplikate (Yjs ignoriert bereits bekannte Operationen).
+  // Seed content only if the room is still empty after syncing. A fixed client ID makes all
+  // clients generate the same update, so simultaneous first visits don't duplicate content.
+  function seedTextIfEmpty(target, content, clientId) {
+    if (target.length !== 0 || !content) return false
+    const seed = new Y.Doc()
+    seed.clientID = clientId
+    seed.getText(target === ytext ? 'code' : 'notes').insert(0, normalizeNewlines(content))
+    Y.applyUpdate(ydoc, Y.encodeStateAsUpdate(seed))
+    return true
+  }
+
   function trySeed() {
     if (!idbSynced || !serverSynced) return
-    if (ytext.length === 0) {
-      const seed = new Y.Doc()
-      seed.clientID = 1
-      seed.getText('code').insert(0, normalizeNewlines(opts.seedText))
-      Y.applyUpdate(ydoc, Y.encodeStateAsUpdate(seed))
-    }
+    seedTextIfEmpty(ytext, opts.seedText, 1)
+    seedTextIfEmpty(ynotes, opts.notesSeed, 2)
     emitChange()
   }
+
   provider.on('sync', synced => {
     if (!synced) return
     serverSynced = true
@@ -227,7 +333,7 @@ export function createEditor(parent, opts) {
   provider.on('status', e => opts.onStatus(e.status))
   opts.onStatus('connecting')
 
-  // --- Mitwirkende ---
+  // --- Contributors ---
   const reportPeers = () => {
     const names = []
     const colors = []
@@ -243,19 +349,40 @@ export function createEditor(parent, opts) {
   awareness.on('change', reportPeers)
   reportPeers()
 
-  // --- Editor-Ansicht ---
-  const theme = EditorView.theme({
-    '&': { height: '100%', fontSize: '15px', backgroundColor: '#ffffff' },
-    '.cm-scroller': { fontFamily: "ui-monospace, 'Cascadia Code', Consolas, monospace", lineHeight: '1.5' },
-    '.cm-gutters': { backgroundColor: '#f8fafc', color: '#94a3b8', border: 'none' },
-    '.cm-activeLine': { backgroundColor: '#f1f5f9' },
-    '.cm-activeLineGutter': { backgroundColor: '#e2e8f0' },
-    '.cm-error-line': { backgroundColor: '#fee2e2', boxShadow: 'inset 3px 0 0 #dc2626' },
+  // --- Theme ---
+  const darkTheme = EditorView.theme({
+    '&': {
+      height: '100%', color: '#dae2fd', backgroundColor: 'transparent', fontSize: '13px'
+    },
+    '.cm-content': {
+      fontFamily: "'JetBrains Mono', ui-monospace, 'Cascadia Code', Consolas, monospace",
+      lineHeight: '22px', padding: '8px 0',
+      caretColor: '#4edea3'
+    },
+    '.cm-scroller': { overflow: 'auto' },
+    '.cm-gutters': { backgroundColor: 'transparent', color: '#475569', border: 'none' },
+    '.cm-lineNumbers .cm-gutterElement': { padding: '0 10px 0 12px' },
+    '.cm-activeLine': { backgroundColor: 'rgba(255,255,255,0.03)' },
+    '.cm-activeLineGutter': { backgroundColor: 'rgba(255,255,255,0.04)', color: '#f8fafc' },
+    '.cm-error-line': { backgroundColor: 'rgba(239,68,68,0.14)', boxShadow: 'inset 3px 0 0 #ef4444' },
+    '.cm-selectionBackground, &.cm-focused .cm-selectionBackground, ::selection': {
+      backgroundColor: 'rgba(78,222,163,0.22)'
+    },
+    '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#4edea3' },
+    '.cm-tooltip': {
+      backgroundColor: '#171f33', color: '#dae2fd',
+      border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px'
+    },
+    '.cm-tooltip-autocomplete > ul > li[aria-selected]': {
+      backgroundColor: '#222a3d', color: '#4edea3'
+    },
+    '.cm-panels': { backgroundColor: '#131b2e', color: '#dae2fd' },
     '&.cm-focused': { outline: 'none' }
-  })
+  }, { dark: true })
 
+  // --- LOGO editor ---
   const view = new EditorView({
-    parent,
+    parent: codeParent,
     state: EditorState.create({
       doc: ytext.toString(),
       extensions: [
@@ -266,13 +393,13 @@ export function createEditor(parent, opts) {
         indentOnInput(),
         bracketMatching(),
         closeBrackets(),
-        // In Logo ist " nur ein Präfix ("wort), kein Anführungszeichenpaar -> nur Klammern schließen
+        // In Logo `"` is a word prefix, not a quote pair — only auto-close brackets.
         EditorState.languageData.of(() => [{ closeBrackets: { brackets: ['(', '['] } }]),
         autocompletion({ override: [completionSource(opts.primitives)] }),
         logoLanguage(opts.primitives),
         syntaxHighlighting(logoHighlight),
         errorLineField,
-        theme,
+        darkTheme,
         keymap.of([
           { key: 'Mod-Enter', run: () => { opts.onRun(); return true } },
           ...closeBracketsKeymap,
@@ -285,26 +412,60 @@ export function createEditor(parent, opts) {
     })
   })
 
-  // Zum Debuggen im Browser: http://localhost:5030/?debug  ->  window.__logo
-  if (location.search.includes('debug')) window.__logo = { ydoc, ytext, view, provider }
+  // --- Notes editor (Markdown, same Yjs document) ---
+  const notesView = new EditorView({
+    parent: notesParent,
+    state: EditorState.create({
+      doc: ynotes.toString(),
+      extensions: [
+        markdown(),
+        syntaxHighlighting(markdownHighlight),
+        drawSelection(),
+        EditorView.lineWrapping,
+        darkTheme,
+        keymap.of([...yUndoManagerKeymap, ...defaultKeymap]),
+        yCollab(ynotes, awareness)
+      ]
+    })
+  })
+
+  // Debug: http://localhost:5030/?debug  ->  window.__logo
+  if (location.search.includes('debug')) {
+    window.__logo = { ydoc, ytext, ynotes, view, notesView, provider }
+  }
 
   return {
-    /** Ersetzt den gemeinsamen Text (für alle Mitwirkenden). */
+    /** Replaces the shared code for all contributors. */
     setText(text) {
       ydoc.transact(() => {
         ytext.delete(0, ytext.length)
         ytext.insert(0, normalizeNewlines(text))
       })
     },
-    /** Markiert eine Zeile (1-basiert) als fehlerhaft; 0 entfernt die Markierung. */
+    /** Marks a line (1-based) as erroneous; 0 removes the marker. */
     setErrorLine(line) {
       view.dispatch({ effects: setErrorLineEffect.of(line) })
     },
+    /** Re-measures the newly visible editor after a tab switch. */
+    setEditorTab(tab) {
+      const target = tab === 'notes' ? notesView : view
+      requestAnimationFrame(() => {
+        target.requestMeasure()
+        target.focus()
+      })
+    },
+    /** Adjusts the debounce for reporting code changes (the "live delay"). */
+    setChangeDelay(ms) {
+      changeDelay = Math.max(0, Number(ms) || 0)
+    },
+    exportSvg,
+    exportPng,
     destroy() {
       clearTimeout(timer)
       clearTimeout(idbFallback)
       awareness.off('change', reportPeers)
       view.destroy()
+      notesView.destroy()
       provider.destroy()
       ydoc.destroy()
     }

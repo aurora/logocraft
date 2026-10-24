@@ -1,7 +1,7 @@
 module Logo.Client.Examples
 
 let flower =
-    """; Blume aus Quadraten
+    """; Flower made of squares
 make "colors [red orange magenta blue green purple]
 
 to square :size
@@ -21,14 +21,14 @@ flower 24
 """
 
 let star =
-    """; Stern
+    """; Star
 setpensize 3
 setpc "red
 repeat 5 [fd 150 rt 144]
 """
 
 let spiral =
-    """; Quadratspirale
+    """; Square spiral
 make "colors [red orange green blue purple]
 
 to spiral :size
@@ -43,7 +43,7 @@ spiral 5
 """
 
 let tree =
-    """; Rekursiver Baum
+    """; Recursive tree
 to tree :size
   if :size < 6 [stop]
   setpensize :size / 12 + 1
@@ -62,7 +62,7 @@ tree 90
 """
 
 let koch =
-    """; Koch-Schneeflocke
+    """; Koch snowflake
 to koch :n :len
   if :n = 0 [fd :len stop]
   koch :n - 1 :len / 3
@@ -80,7 +80,7 @@ repeat 3 [koch 3 300 rt 120]
 """
 
 let circles =
-    """; Kreise mit arc
+    """; Circles with arc
 make "colors [red orange green cyan blue purple]
 setpensize 2
 for [i 1 12] [
@@ -90,9 +90,25 @@ for [i 1 12] [
 """
 
 let all : (string * string) list =
-    [ "Blume", flower
-      "Stern", star
-      "Spirale", spiral
-      "Baum", tree
-      "Koch-Schneeflocke", koch
-      "Kreise", circles ]
+    [ "Flower", flower
+      "Star", star
+      "Spiral", spiral
+      "Tree", tree
+      "Koch Snowflake", koch
+      "Circles", circles ]
+
+/// Initial content of the shared notes tab. Only used when a room has no notes yet.
+let defaultNotes =
+    """# Project notes
+
+This document is shared with everyone in the room and saved in your browser.
+
+## Ideas
+- Try `repeat 12 [fd 80 rt 30]`
+- Use `setpc` with names such as `red`, `green` or `[0 80 100]`
+- Combine procedures to build more complex drawings
+
+## Language
+Type a command in the REPL below the editor to experiment. The REPL keeps the
+turtle state between commands; **Run** resets it to the program above.
+"""

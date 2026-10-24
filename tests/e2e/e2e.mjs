@@ -29,13 +29,27 @@ const browser = await puppeteer.launch({
 })
 const problems = []
 
-async function open(roomId = room) {
+async function ensureName(page, name) {
+  try {
+    await page.waitForSelector('[data-testid="name-prompt"]', { timeout: 700 })
+  } catch {
+    return false
+  }
+  await page.$eval('[data-testid="name-input"]', el => { el.focus(); el.select() })
+  await page.keyboard.type(name, { delay: 25 })
+  await page.click('[data-testid="name-save"]')
+  await page.waitForSelector('[data-testid="name-prompt"]', { hidden: true })
+  return true
+}
+
+async function open(roomId = room, name = 'Alice') {
   const page = await browser.newPage()
   await page.setViewport({ width: 1440, height: 900 })
   page.on('pageerror', e => problems.push('pageerror: ' + e.message))
   page.on('console', m => { if (m.type() === 'error') problems.push('console: ' + m.text()) })
   await page.goto(`${base}/?room=${roomId}`)
   await page.waitForSelector('.editor-host .cm-content')
+  await ensureName(page, name)
   return page
 }
 
@@ -61,6 +75,25 @@ const until = async (fn, ms = 5000) => {
 }
 
 try {
+  // First visit: the name prompt (isolated browser context)
+  const nameCtx = await browser.createBrowserContext()
+  const np = await nameCtx.newPage()
+  await np.setViewport({ width: 1440, height: 900 })
+  np.on('pageerror', e => problems.push('pageerror: ' + e.message))
+  np.on('console', m => { if (m.type() === 'error') problems.push('console: ' + m.text()) })
+  await np.goto(base)
+  await np.waitForSelector('.editor-host .cm-content')
+  check('Name prompt appears on first visit', await until(async () => (await np.$('[data-testid="name-prompt"]')) !== null))
+  const suggested = await np.$eval('[data-testid="name-input"]', el => el.value)
+  check('Name prompt suggests a generated name', suggested.length > 0)
+  await np.$eval('[data-testid="name-input"]', el => { el.focus(); el.select() })
+  await np.keyboard.type('Zoe', { delay: 25 })
+  await np.click('[data-testid="name-save"]')
+  check('Name prompt closes after saving', await until(async () => (await np.$('[data-testid="name-prompt"]')) === null))
+  check('Chosen name is remembered', (await np.evaluate(() => localStorage.getItem('logo-name'))) === 'Zoe')
+  check('Chosen name appears in the room', await until(async () => ((await text(np, '.presence-pill')) ?? '').includes('Zoe')))
+  await nameCtx.close()
+
   const p1 = await open()
   check('Page 1: connected', await until(async () => (await text(p1, '.status')) === 'Connected'))
   check('Page 1: seed program appears', await until(async () => (await editorText(p1)).includes('flower 24')))
@@ -76,6 +109,30 @@ try {
     ((await editorText(p2)).match(/to flower/g) ?? []).length === 1)
   check('Page 2: drawing is rendered', await until(async () => (await count(p2, 'svg.canvas polyline')) > 0))
   check('Both see 2 collaborators', await until(async () => (await count(p1, '.peer')) === 2 && (await count(p2, '.peer')) === 2))
+
+  // Renaming, duplicate-name warning and always-visible remote cursor labels
+  await front(p2)
+  await p2.click('[data-testid="settings-open"]')
+  await p2.waitForSelector('[data-testid="name-settings-input"]')
+  await p2.$eval('[data-testid="name-settings-input"]', el => { el.focus(); el.select() })
+  await p2.keyboard.type('Alice', { delay: 25 })
+  check('Duplicate name warning appears', await until(async () => (await count(p2, '.name-warning')) === 1))
+  await p2.$eval('[data-testid="name-settings-input"]', el => { el.focus(); el.select() })
+  await p2.keyboard.type('Bob', { delay: 25 })
+  await p2.click('[data-testid="name-settings-save"]')
+  await p2.click('[data-testid="settings-close"]')
+  await p2.waitForSelector('[data-testid="settings-modal"]', { hidden: true })
+  check('Renamed collaborator appears on page 1', await until(async () => ((await text(p1, '.presence-pills')) ?? '').includes('Bob')))
+  await front(p2)
+  await p2.click('.editor-host .cm-content')
+  await p2.keyboard.press('ArrowDown')
+  check('Remote cursor shows the collaborator name', await until(async () => {
+    await front(p1)
+    const labels = await p1.$$eval('.cm-ySelectionInfo', els => els.map(e => e.textContent.trim()))
+    return labels.includes('Bob')
+  }))
+  const labelOpacity = await p1.$eval('.cm-ySelectionInfo', el => getComputedStyle(el).opacity).catch(() => null)
+  check('Cursor label is always visible', labelOpacity === '1')
 
   // Typing on page 1 -> appears on page 2 and changes the drawing there
   const before = await count(p2, 'svg.canvas polyline')
@@ -259,6 +316,7 @@ try {
 
   await q.goto(base)
   await q.waitForSelector('.editor-host .cm-content')
+  await ensureName(q, 'Rooms')
   const first = roomOf(q)
   check('Without ?room= a four-word room ID is created', roomPattern.test(first ?? ''), String(first))
   check('Seed program in the new room', await until(async () => (await editorText(q)).includes('flower 24')))

@@ -16,6 +16,9 @@ There is no database and no user management: each browser stores its rooms local
   paths. Toggle *Animate* in the canvas toolbar or replay the current drawing with the play
   button; the playback speed is adjustable from 0.25× to 4×. Animation and live run are
   mutually exclusive.
+- **Display names** — on the first visit you choose a name or accept a generated suggestion.
+  Change it later in *Room settings*; duplicate names are allowed with a warning, and
+  collaborator names are always visible at their remote cursors.
 - **Shared code and notes** — two `Y.Text`s in the same Yjs document. The *Notes & Docs*
   tab is a collaborative Markdown pad, edited with CodeMirror as well.
 - **Stateful REPL** — commands run against the current turtle, variables and procedures and
@@ -82,6 +85,9 @@ flowchart LR
 - **Animated drawing** is computed in `View.fs` from the finished path list: partial
   polylines are rendered for the first *n* segments and the turtle position/heading is
   interpolated along the current segment. No interpreter changes are needed.
+- **Presence**: awareness carries `{ name, color }`; the confirmed name is stored in
+  `localStorage` (`logo-name`) and can be changed at any time. The remote caret labels come
+  from y-codemirror and are kept permanently visible by the stylesheet.
 - **Inviting**: *Copy link* copies the room URL; *Join room* accepts a room ID or a full
   invite link. *New room* creates a room, *Project Files* switches rooms, and *Forget*
   removes the local copy only.
@@ -192,9 +198,9 @@ visible.
   clients, it returns with the ID.
 - **One server instance**: the relay keeps state locally; multiple instances would need
   e.g. Redis.
-- **No access control**: anyone with the URL can read and write. Names/colors are random and
-  display-only; roles, passwords and room visibility in the settings panel are not backed
-  by the server.
+- **No access control**: anyone with the URL can read and write. Names are display-only and
+  not unique; colors and cursor labels help tell collaborators apart. Roles, passwords and
+  room visibility in the settings panel are not backed by the server.
 - **REPL is local**: typed commands affect only this browser and are not synchronized.
   *Run* resets the session to the shared program.
 - “Load example” replaces the shared code **for everyone**.

@@ -336,7 +336,7 @@ let private presencePills (model: Model) =
                     prop.style [ style.borderColor (p.Color + "66") ]
                     prop.children [
                         Html.span [ prop.className "status-dot"; prop.style [ style.backgroundColor p.Color ] ]
-                        Html.span [ prop.text (if p.IsSelf then "You" else p.Name) ]
+                        Html.span [ prop.text (if p.IsSelf then p.Name + " (you)" else p.Name) ]
                     ]
                 ]
             if model.Peers.Length > 3 then
@@ -447,7 +447,7 @@ let private topbar (model: Model) (dispatch: Msg -> unit) =
                     btn "btn btn-ghost btn-sm" "Clear the canvas" "clear" ClearCanvas dispatch "restart_alt" "Clear"
                     Html.div [
                         prop.className "avatar"
-                        prop.title "You"
+                        prop.title (if model.MyName = "" then "You" else model.MyName)
                         prop.children [
                             match model.Peers |> List.tryFind (fun p -> p.IsSelf) with
                             | Some p -> Html.span [ prop.text (initials p.Name) ]
@@ -682,6 +682,7 @@ let private EditorHost (model: Model) (dispatch: Msg -> unit) =
         | Some codeElement, Some notesElement ->
             let options: Interop.EditorOptions =
                 { room = model.Room
+                  userName = model.MyName
                   primitives = Interpreter.primitiveNames
                   seedText = Examples.flower
                   notesSeed = Examples.defaultNotes
@@ -1268,6 +1269,122 @@ let private toggleRow (label: string) (description: string) (checkedValue: bool)
         ]
     ]
 
+let private nameWarning (name: string) (model: Model) =
+    if nameTaken name model then
+        Html.div [
+            prop.className "name-warning"
+            prop.text "Another collaborator already uses this name. Colors and cursor labels still tell you apart."
+        ]
+    else
+        Html.div [ prop.className "is-hidden" ]
+
+[<ReactComponent>]
+let private NamePromptModal (model: Model) (dispatch: Msg -> unit) =
+    let name, setName = React.useState (model.SuggestedName)
+    Html.div [
+        prop.className "overlay"
+        prop.custom ("role", "dialog")
+        prop.custom ("aria-modal", "true")
+        prop.children [
+            Html.div [
+                prop.className "modal name-modal"
+                prop.custom ("data-testid", "name-prompt")
+                prop.children [
+                    Html.div [
+                        prop.className "modal-header"
+                        prop.children [
+                            Html.div [
+                                prop.children [
+                                    Html.div [
+                                        prop.className "modal-title-row"
+                                        prop.children [
+                                            Html.h2 [ prop.className "modal-title"; prop.text "Welcome to LogoCraft Studio" ]
+                                        ]
+                                    ]
+                                    Html.p [
+                                        prop.className "modal-subtitle"
+                                        prop.text "Choose how other collaborators see you in this room."
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                    Html.div [
+                        prop.className "modal-body"
+                        prop.children [
+                            Html.div [ prop.className "modal-section-title"; prop.text "Display name" ]
+                            Html.input [
+                                prop.className "text-input"
+                                prop.type'.text
+                                prop.placeholder "Your display name"
+                                prop.value name
+                                prop.custom ("data-testid", "name-input")
+                                prop.autoFocus true
+                                prop.onChange (fun (text: string) -> setName text)
+                                prop.onKeyDown (fun (e: Browser.Types.KeyboardEvent) ->
+                                    if e.key = "Enter" then
+                                        e.preventDefault ()
+                                        dispatch (SaveName name))
+                            ]
+                            Html.p [
+                                prop.className "panel-note"
+                                prop.text $"Suggested: {model.SuggestedName}. You can change this later in Room settings."
+                            ]
+                            nameWarning name model
+                        ]
+                    ]
+                    Html.div [
+                        prop.className "modal-footer"
+                        prop.children [
+                            Html.span [ prop.className "modal-footer-note"; prop.text "Display only — no account is created." ]
+                            Html.div [
+                                prop.className "run-cluster"
+                                prop.children [
+                                    btn "btn btn-ghost btn-sm" "Use the suggested name" "name-suggested" (SaveName model.SuggestedName) dispatch "" "Use suggested"
+                                    btn "btn btn-primary btn-sm" "Join the room with this name" "name-save" (SaveName name) dispatch "" "Join room"
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+    ]
+
+[<ReactComponent>]
+let private NameField (model: Model) (dispatch: Msg -> unit) =
+    let name, setName = React.useState (if model.MyName = "" then model.SuggestedName else model.MyName)
+    let save () = dispatch (SaveName name)
+    Html.div [
+        prop.className "info-block"
+        prop.children [
+            Html.div [ prop.className "info-label"; prop.text "Display name" ]
+            Html.div [
+                prop.className "invite-row"
+                prop.children [
+                    Html.input [
+                        prop.className "text-input"
+                        prop.type'.text
+                        prop.placeholder "Your display name"
+                        prop.value name
+                        prop.custom ("data-testid", "name-settings-input")
+                        prop.onChange (fun (text: string) -> setName text)
+                        prop.onKeyDown (fun (e: Browser.Types.KeyboardEvent) ->
+                            if e.key = "Enter" then
+                                e.preventDefault ()
+                                save ())
+                    ]
+                    btn "btn btn-primary btn-sm" "Save display name" "name-settings-save" (SaveName name) dispatch "check" "Save"
+                ]
+            ]
+            nameWarning name model
+            Html.p [
+                prop.className "panel-note"
+                prop.text "Shown to everyone in this room. Duplicate names are allowed; colors and cursor labels help tell collaborators apart."
+            ]
+        ]
+    ]
+
 let private settingsModal (model: Model) (dispatch: Msg -> unit) =
     let tabButton (label: string) (iconName: string) (tab: SettingsTab) =
         Html.button [
@@ -1281,6 +1398,8 @@ let private settingsModal (model: Model) (dispatch: Msg -> unit) =
         Html.div [
             prop.className "modal-body"
             prop.children [
+                Html.div [ prop.className "modal-section-title"; prop.text "Profile" ]
+                NameField model dispatch
                 Html.div [ prop.className "modal-section-title"; prop.text "Room access" ]
                 Html.div [
                     prop.className "info-block"
@@ -1531,5 +1650,6 @@ let view (model: Model) (dispatch: Msg -> unit) =
                 ]
             ]
             if model.SettingsOpen then settingsModal model dispatch
+            if model.NamePromptOpen then NamePromptModal model dispatch
         ]
     ]

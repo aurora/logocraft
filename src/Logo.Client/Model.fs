@@ -64,6 +64,12 @@ type Model =
       Room: string
       /// Locally remembered rooms, most recently opened first
       Rooms: Rooms.Entry list
+      /// Confirmed display name (empty until the onboarding prompt is completed)
+      MyName: string
+      /// Stable generated suggestion shown on a first visit
+      SuggestedName: string
+      /// Show the welcome dialog on a first visit
+      NamePromptOpen: bool
       /// Invite link was just copied (short feedback)
       Copied: bool
       /// Current shared program text
@@ -135,6 +141,7 @@ type Msg =
     | OpenSettings
     | CloseSettings
     | SetSettingsTab of SettingsTab
+    | SaveName of string
     | ImportFile
     | ExportSvg
     | ExportPng
@@ -221,6 +228,13 @@ let segmentsOf (drawing: Drawing) =
 let statsText (drawing: Drawing) =
     $"paths: {drawing.Paths.Length} · segments: {segmentsOf drawing} · steps: {drawing.Steps}"
 
+/// True when another participant in this room already uses `name`.
+let nameTaken (name: string) (model: Model) =
+    let draft = name.Trim().ToLowerInvariant()
+    draft <> ""
+    && model.Peers
+       |> List.exists (fun p -> not p.IsSelf && p.Name.Trim().ToLowerInvariant() = draft)
+
 // ---------------------------------------------------------------------------
 // Animated drawing
 // ---------------------------------------------------------------------------
@@ -283,8 +297,15 @@ let init () : Model * Cmd<Msg> =
             | [] -> Rooms.newId ()
     let session = Session()
     let initial = session.Run ""
+    let stored = Interop.storedName ()
+    let suggestion = Interop.suggestedName ()
+    let myName = if isNull stored then "" else stored.Trim()
+    let namePromptOpen = myName = ""
     { Room = room
       Rooms = Rooms.touch room
+      MyName = myName
+      SuggestedName = suggestion
+      NamePromptOpen = namePromptOpen
       Copied = false
       Code = ""
       Result = initial
@@ -332,6 +353,18 @@ let private importFile () =
             match Interop.current with
             | Some editor -> editor.setText text
             | None -> ()))
+
+let private saveName (raw: string) (model: Model) =
+    let trimmed = if isNull raw then "" else raw.Trim()
+    let name =
+        if trimmed = "" then model.SuggestedName
+        elif trimmed.Length > 32 then trimmed.Substring(0, 32)
+        else trimmed
+    Interop.current |> Option.iter (fun editor -> editor.setUserName name)
+    { model with
+        MyName = name
+        NamePromptOpen = false }
+    |> addLog System $"Display name set to “{name}”."
 
 let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     match msg with
@@ -496,9 +529,11 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         { model with FileMenuOpen = not model.FileMenuOpen; ExportMenuOpen = false }, Cmd.none
     | ToggleExportMenu ->
         { model with ExportMenuOpen = not model.ExportMenuOpen; FileMenuOpen = false }, Cmd.none
-    | OpenSettings -> { model with SettingsOpen = true; SettingsTab = GeneralTab }, Cmd.none
+    | OpenSettings ->
+        { model with SettingsOpen = true; SettingsTab = GeneralTab }, Cmd.none
     | CloseSettings -> { model with SettingsOpen = false }, Cmd.none
     | SetSettingsTab tab -> { model with SettingsTab = tab }, Cmd.none
+    | SaveName name -> saveName name model, Cmd.none
     | ImportFile -> model, Cmd.OfFunc.perform importFile () (fun () -> NoOp)
     | ExportSvg ->
         match Interop.current with

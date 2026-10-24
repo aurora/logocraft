@@ -128,6 +128,8 @@ function completionSource(primitives) {
 const ADJECTIVES = ['Swift', 'Clever', 'Curious', 'Busy', 'Calm', 'Brave', 'Playful', 'Quiet']
 const ANIMALS = ['Turtle', 'Owl', 'Fox', 'Otter', 'Hedgehog', 'Penguin', 'Octopus', 'Badger']
 const COLORS = ['#e11d48', '#2563eb', '#16a34a', '#d97706', '#9333ea', '#0891b2', '#db2777', '#4f46e5']
+const NAME_KEY = 'logo-name'
+const SUGGESTION_KEY = 'logo-suggested-name'
 
 function pick(list) { return list[Math.floor(Math.random() * list.length)] }
 
@@ -135,13 +137,33 @@ function pick(list) { return list[Math.floor(Math.random() * list.length)] }
 // otherwise positions and lengths diverge between the editor and the shared document.
 const normalizeNewlines = text => text.replace(/\r\n?/g, '\n')
 
-function identity() {
+const normalizeName = raw =>
+    String(raw ?? '').trim().replace(/\s+/g, ' ').slice(0, 32)
+
+/** The name the user confirmed earlier (empty string if this is a first visit). */
+export function getStoredName() {
+  try { return normalizeName(localStorage.getItem(NAME_KEY)) } catch { return '' }
+}
+
+/** A stable suggestion for this tab, so the prompt and the awareness name agree. */
+export function getSuggestedName() {
+  const stored = getStoredName()
+  if (stored) return stored
   try {
-    const stored = sessionStorage.getItem('logo-identity')
-    if (stored) return JSON.parse(stored)
+    const cached = normalizeName(sessionStorage.getItem(SUGGESTION_KEY))
+    if (cached) return cached
   } catch { /* ignore */ }
-  const color = pick(COLORS)
-  const id = { name: `${pick(ADJECTIVES)} ${pick(ANIMALS)}`, color, colorLight: color + '33' }
+  const name = `${pick(ADJECTIVES)} ${pick(ANIMALS)}`
+  try { sessionStorage.setItem(SUGGESTION_KEY, name) } catch { /* ignore */ }
+  return name
+}
+
+function identity(preferredName) {
+  let stored = null
+  try { stored = JSON.parse(sessionStorage.getItem('logo-identity') || 'null') } catch { /* ignore */ }
+  const color = stored && stored.color ? stored.color : pick(COLORS)
+  const name = normalizeName(preferredName) || getStoredName() || getSuggestedName()
+  const id = { name, color, colorLight: color + '33' }
   try { sessionStorage.setItem('logo-identity', JSON.stringify(id)) } catch { /* ignore */ }
   return id
 }
@@ -261,6 +283,7 @@ export function pickLogoFile(onText) {
  * @param {HTMLElement} notesParent
  * @param {{
  *   room: string,
+ *   userName: string,
  *   primitives: string[],
  *   seedText: string,
  *   notesSeed: string,
@@ -280,7 +303,7 @@ export function createEditor(codeParent, notesParent, opts) {
   // which knows which awareness entry belongs to a connection and removes it on disconnect.
   const provider = new WebsocketProvider(`${proto}://${location.host}/ws`, opts.room, ydoc, { disableBc: true })
   const awareness = provider.awareness
-  const me = identity()
+  let me = identity(opts.userName)
   awareness.setLocalStateField('user', me)
 
   // --- Report code changes to F# (lightly debounced) ---
@@ -457,6 +480,20 @@ export function createEditor(codeParent, notesParent, opts) {
     /** Adjusts the debounce for reporting code changes (the "live delay"). */
     setChangeDelay(ms) {
       changeDelay = Math.max(0, Number(ms) || 0)
+    },
+    /** Changes the display name for this tab and remembers it for future visits. */
+    setUserName(name) {
+      const clean = normalizeName(name) || getSuggestedName()
+      try { localStorage.setItem(NAME_KEY, clean) } catch { /* ignore */ }
+      // Replace the user object instead of mutating it: y-protocols compares the
+      // previous and next state deeply and would otherwise skip the change event.
+      // The new color also forces y-codemirror to rebuild its caret label (its
+      // widget equality only compares colors, not names).
+      const colorIndex = COLORS.indexOf(me.color)
+      const color = COLORS[(colorIndex + 1 + COLORS.length) % COLORS.length]
+      me = { ...me, name: clean, color, colorLight: color + '33' }
+      awareness.setLocalStateField('user', me)
+      try { sessionStorage.setItem('logo-identity', JSON.stringify(me)) } catch { /* ignore */ }
     },
     exportSvg,
     exportPng,

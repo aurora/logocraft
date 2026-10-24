@@ -714,6 +714,23 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .cm-editor.cm-focused { outline: none; }
 .cm-tooltip { z-index: 70; }
 
+/* Always show collaborator names at remote cursors (y-codemirror hides them until hover). */
+.cm-editor .cm-ySelectionInfo {
+  opacity: 1 !important;
+  top: -1.35em;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  line-height: 1.4;
+  padding: 1px 5px;
+  border-radius: 3px 3px 3px 0;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .4);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .3);
+  pointer-events: none;
+}
+
 /* --------------------------------------------------------------------------
    REPL
    -------------------------------------------------------------------------- */
@@ -1197,6 +1214,39 @@ button:disabled { cursor: not-allowed; opacity: .45; }
   background: var(--surface-container-low);
   border: 1px solid rgba(255, 255, 255, .12);
   box-shadow: 0 30px 80px rgba(0, 0, 0, .55);
+}
+
+.modal.name-modal { width: min(520px, 100%); }
+
+.text-input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 9px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(255, 255, 255, .12);
+  background: var(--surface-container-high);
+  color: var(--on-surface);
+  font-family: var(--font-ui);
+  font-size: 12px;
+}
+
+.text-input:focus {
+  outline: none;
+  border-color: rgba(6, 182, 212, .5);
+  box-shadow: 0 0 0 1px rgba(6, 182, 212, .25);
+}
+
+.text-input::placeholder { color: rgba(134, 148, 138, .6); }
+
+.name-warning {
+  margin-top: 8px;
+  padding: 7px 9px;
+  border-radius: var(--radius);
+  background: rgba(251, 191, 36, .1);
+  border: 1px solid rgba(251, 191, 36, .25);
+  color: #fde68a;
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .modal-header {

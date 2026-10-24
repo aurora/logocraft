@@ -7,6 +7,8 @@ open Browser.Types
 
 type EditorOptions =
     { room: string
+      /// Confirmed display name (empty on a first visit; editor.js then uses its suggestion)
+      userName: string
       /// Names of all primitives, for highlighting and completion
       primitives: string[]
       /// Start program if the room is still empty
@@ -27,6 +29,8 @@ type EditorHandle =
     abstract setEditorTab: string -> unit
     /// Changes the debounce used for reporting code changes ("live delay")
     abstract setChangeDelay: int -> unit
+    /// Changes the display name in Yjs awareness and remembers it locally
+    abstract setUserName: string -> unit
     abstract exportSvg: string -> unit
     abstract exportPng: string -> unit
     abstract destroy: unit -> unit
@@ -37,6 +41,14 @@ let createEditor (codeParent: HTMLElement) (notesParent: HTMLElement) (options: 
 /// Opens a file picker and calls `onText` with the selected UTF-8 text file.
 [<Import("pickLogoFile", "./editor.js")>]
 let pickLogoFile (onText: Action<string>) : unit = jsNative
+
+/// The display name the user confirmed earlier (empty string on a first visit).
+[<Import("getStoredName", "./editor.js")>]
+let storedName () : string = jsNative
+
+/// A stable generated-name suggestion for this tab.
+[<Import("getSuggestedName", "./editor.js")>]
+let suggestedName () : string = jsNative
 
 /// Deletes the locally (IndexedDB) stored content of a room. `onDone` is called afterwards.
 /// The room must not be open anymore (destroy the editor first).

@@ -114,6 +114,27 @@ const errorLineField = StateField.define({
   provide: f => EditorView.decorations.from(f)
 })
 
+const setStepLineEffect = StateEffect.define()
+const stepLineField = StateField.define({
+  create: () => Decoration.none,
+  update(deco, tr) {
+    deco = deco.map(tr.changes)
+    for (const e of tr.effects) {
+      if (e.is(setStepLineEffect)) {
+        const n = e.value
+        if (n >= 1 && n <= tr.state.doc.lines) {
+          const line = tr.state.doc.line(n)
+          deco = Decoration.set([Decoration.line({ class: 'cm-step-line' }).range(line.from)])
+        } else {
+          deco = Decoration.none
+        }
+      }
+    }
+    return deco
+  },
+  provide: f => EditorView.decorations.from(f)
+})
+
 // ---------------------------------------------------------------------------
 // Autocompletion: primitives + user-defined procedures
 // ---------------------------------------------------------------------------
@@ -505,6 +526,7 @@ export function createEditor(codeParent, notesParent, opts) {
     '.cm-activeLine': { backgroundColor: 'rgba(255,255,255,0.03)' },
     '.cm-activeLineGutter': { backgroundColor: 'rgba(255,255,255,0.04)', color: '#f8fafc' },
     '.cm-error-line': { backgroundColor: 'rgba(239,68,68,0.14)', boxShadow: 'inset 3px 0 0 #ef4444' },
+    '.cm-step-line': { backgroundColor: 'rgba(251,191,36,0.12)', boxShadow: 'inset 3px 0 0 #fbbf24' },
     '.cm-selectionBackground, &.cm-focused .cm-selectionBackground, ::selection': {
       backgroundColor: 'rgba(78,222,163,0.22)'
     },
@@ -543,6 +565,7 @@ export function createEditor(codeParent, notesParent, opts) {
         logoLanguage(opts.primitives),
         syntaxHighlighting(logoHighlight),
         errorLineField,
+        stepLineField,
         darkTheme,
         keymap.of([
           { key: 'Mod-Enter', run: () => { opts.onRun(); return true } },
@@ -589,6 +612,14 @@ export function createEditor(codeParent, notesParent, opts) {
     /** Marks a line (1-based) as erroneous; 0 removes the marker. */
     setErrorLine(line) {
       view.dispatch({ effects: setErrorLineEffect.of(line) })
+    },
+    /** Marks the current step line and scrolls it into view; 0 removes the marker. */
+    setStepLine(line) {
+      const effects = [setStepLineEffect.of(line)]
+      if (line >= 1 && line <= view.state.doc.lines) {
+        effects.push(EditorView.scrollIntoView(view.state.doc.line(line).from, { y: 'center' }))
+      }
+      view.dispatch({ effects })
     },
     /** Re-measures the newly visible editor after a tab switch. */
     setEditorTab(tab) {

@@ -303,6 +303,11 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 
 .btn-ghost.danger { color: var(--error); }
 .btn-ghost.danger:hover { background: rgba(239, 68, 68, .12); color: #ffd1cb; }
+.btn-ghost.active {
+  background: rgba(78, 222, 163, .12);
+  color: var(--primary);
+  border-color: rgba(78, 222, 163, .3);
+}
 
 .ghost-btn {
   display: inline-flex;
@@ -414,6 +419,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 }
 
 .badge.primary { background: rgba(78, 222, 163, .14); color: var(--primary); }
+.badge.step { background: rgba(251, 191, 36, .14); color: #fde68a; }
 
 /* --------------------------------------------------------------------------
    Sidebar

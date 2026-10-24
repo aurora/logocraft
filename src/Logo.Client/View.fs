@@ -140,6 +140,26 @@ let private partialPaths (paths: Path[]) (progress: float) =
                     remaining <- 0.0
         result.ToArray()
 
+/// Returns the drawing prefix with at most `pointCount` points.
+let private prefixPaths (paths: Path[]) (pointCount: int) =
+    let result = ResizeArray<Path>()
+    let mutable remaining = max 0 pointCount
+    for path in paths do
+        if remaining > 0 then
+            if path.Points.Length <= remaining then
+                result.Add path
+                remaining <- remaining - path.Points.Length
+            else
+                result.Add { path with Points = Array.sub path.Points 0 remaining }
+                remaining <- 0
+    result.ToArray()
+
+let private stepEvent (model: Model) =
+    if model.StepActive && model.StepIndex >= 0 && model.StepIndex < model.StepEvents.Length then
+        Some model.StepEvents.[model.StepIndex]
+    else
+        None
+
 /// Position and heading of the turtle at `progress` segments into the drawing.
 let private animatedTurtle (drawing: Drawing) (progress: float) =
     let total = float (segmentsOf drawing)
@@ -187,12 +207,18 @@ let private animatedTurtle (drawing: Drawing) (progress: float) =
         | None -> drawing.Turtle
 
 let private turtleNow (model: Model) =
-    if model.Animation.Playing then animatedTurtle model.Drawing model.Animation.Progress
-    else model.Drawing.Turtle
+    match stepEvent model with
+    | Some e -> e.Turtle
+    | None ->
+        if model.Animation.Playing then animatedTurtle model.Drawing model.Animation.Progress
+        else model.Drawing.Turtle
 
 let private pathsNow (model: Model) =
-    if model.Animation.Playing then partialPaths model.Drawing.Paths model.Animation.Progress
-    else model.Drawing.Paths
+    match stepEvent model with
+    | Some e -> prefixPaths model.Drawing.Paths e.PointCount
+    | None ->
+        if model.Animation.Playing then partialPaths model.Drawing.Paths model.Animation.Progress
+        else model.Drawing.Paths
 
 type private Camera =
     { Eye: float * float * float
@@ -752,8 +778,6 @@ let private topbar (model: Model) (dispatch: Msg -> unit) =
                     presencePills model
                     fileMenu model dispatch
                     exportMenu model dispatch
-                    btn "btn btn-primary btn-sm" "Run program (Ctrl+Enter)" "run" Run dispatch "play_arrow" "Run"
-                    btn "btn btn-ghost btn-sm" "Clear the canvas" "clear" ClearCanvas dispatch "restart_alt" "Clear"
                     Html.div [
                         prop.className "avatar"
                         prop.title (if model.MyName = "" then "You" else model.MyName)
@@ -929,11 +953,12 @@ let private subheader (model: Model) (dispatch: Msg -> unit) =
                         prop.children [
                             btn "btn btn-primary btn-sm" "Run program (Ctrl+Enter)" "run-sub" Run dispatch "play_arrow" "Run"
                             Html.button [
-                                prop.className "btn btn-ghost btn-sm"
+                                prop.className ("btn btn-ghost btn-sm" + (if model.StepActive then " active" else ""))
                                 prop.type'.button
-                                prop.disabled true
-                                prop.title "Single-step execution is not implemented yet"
-                                prop.children [ icon "step_over"; Html.span [ prop.text "Step" ] ]
+                                prop.title (if model.StepActive then "Next turtle movement" else "Step through turtle movements")
+                                prop.custom ("data-testid", "step")
+                                prop.onClick (fun _ -> dispatch Step)
+                                prop.children [ icon "step_over"; Html.span [ prop.text (if model.StepActive then "Next" else "Step") ] ]
                             ]
                             btn "btn btn-ghost btn-sm danger" "Clear the canvas" "stop" ClearCanvas dispatch "stop" ""
                         ]
@@ -1019,6 +1044,17 @@ let private EditorHost (model: Model) (dispatch: Msg -> unit) =
         [| box errorLine; box model.RunId |]
     )
 
+    let stepLine =
+        match stepEvent model with
+        | Some e -> e.Line
+        | None -> 0
+
+    React.useEffect (
+        (fun () ->
+            handle.current |> Option.iter (fun editor -> editor.setStepLine stepLine)),
+        [| box stepLine |]
+    )
+
     React.useEffect (
         (fun () ->
             handle.current
@@ -1098,6 +1134,14 @@ let private ReplPanel (model: Model) (dispatch: Msg -> unit) =
                     icon "terminal"
                     Html.span [ prop.className "repl-title"; prop.text "Logo REPL & Protocol" ]
                     Html.span [ prop.className "badge primary"; prop.text "local" ]
+                    match stepEvent model with
+                    | Some e ->
+                        Html.span [
+                            prop.className "badge step"
+                            prop.custom ("data-testid", "step-status")
+                            prop.text $"step {model.StepIndex + 1}/{model.StepEvents.Length} · line {e.Line}"
+                        ]
+                    | None -> ()
                     Html.div [ prop.className "spacer" ]
                     Html.button [
                         prop.className "icon-btn tiny"
@@ -1344,11 +1388,14 @@ let private canvasWatermark (model: Model) =
         ]
     else
         let hint =
-            if model.View3D then "3D view · drag to orbit · scroll to zoom"
-            else "local REPL · scroll to zoom"
+            match stepEvent model with
+            | Some e -> $"step {model.StepIndex + 1}/{model.StepEvents.Length} · line {e.Line}"
+            | None ->
+                if model.View3D then "3D view · drag to orbit"
+                else "local REPL"
         Html.div [
             prop.className "canvas-watermark"
-            prop.text $"{statsText model.Drawing} · {hint}"
+            prop.text $"{statsText model.Drawing} · {hint} · scroll to zoom"
         ]
 
 [<ReactComponent>]

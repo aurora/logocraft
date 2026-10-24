@@ -146,6 +146,7 @@ try {
   check('Page 1: syntax highlighting active (token classes)', (await count(p1, '.cm-line span[class]')) > 5)
   check('Page 1: no error in the seed program', (await count(p1, '.console-err')) === 0)
   check('Page 1: studio shell is visible', (await count(p1, '[data-testid="nav-code"]')) === 1)
+  check('Only the subheader Run remains', (await count(p1, '[data-testid="run"]')) === 0 && (await count(p1, '[data-testid="run-sub"]')) === 1)
 
   const p2 = await open()
   check('Page 2: connected', await until(async () => (await text(p2, '.status')) === 'Connected'))
@@ -250,6 +251,34 @@ try {
     return (await count(p1, 'svg.canvas polyline')) === 2 && stats.includes('paths: 2')
   }))
   check('REPL is local (page 2 drawing unchanged)', (await count(p2, 'svg.canvas polyline')) === p2BeforeRepl)
+
+  // Turtle-movement stepping
+  check('Step button is enabled', (await p1.$eval('[data-testid="step"]', el => el.disabled)) === false)
+  await p1.click('[data-testid="step"]')
+  check('Step mode starts at the first movement', await until(async () => ((await text(p1, '[data-testid="step-status"]')) ?? '').includes('STEP 1/')))
+  check('Step line is highlighted in the editor', await until(async () => (await count(p1, '.cm-step-line')) === 1))
+  const stepPoints1 = await p1.$$eval('svg.canvas polyline', els => els.reduce((n, e) => n + ((e.getAttribute('points') || '').trim().split(/\s+/).length), 0))
+  const stepStatus = (await text(p1, '[data-testid="step-status"]')) ?? ''
+  const totalSteps = Number((stepStatus.match(/\/(\d+)/) ?? [])[1] ?? 0)
+  check('Step trace has movements', totalSteps > 1)
+  await p1.click('[data-testid="step"]')
+  check('Step advances', await until(async () => ((await text(p1, '[data-testid="step-status"]')) ?? '').includes('STEP 2/')))
+  const stepPoints2 = await p1.$$eval('svg.canvas polyline', els => els.reduce((n, e) => n + ((e.getAttribute('points') || '').trim().split(/\s+/).length), 0))
+  check('Step reveals more drawing', stepPoints2 > stepPoints1)
+  for (let i = 2; i < totalSteps; i++) {
+    await p1.click('[data-testid="step"]')
+    await until(async () => ((await text(p1, '[data-testid="step-status"]')) ?? '').includes(`STEP ${i + 1}/`))
+  }
+  check('Step reaches the end', await until(async () => ((await text(p1, '[data-testid="step-status"]')) ?? '').includes(`STEP ${totalSteps}/${totalSteps}`)))
+  await p1.click('[data-testid="step"]')
+  check('Step mode ends', await until(async () => (await p1.$('[data-testid="step-status"]')) === null))
+  check('Step line is cleared', await until(async () => (await count(p1, '.cm-step-line')) === 0))
+  await p1.click('[data-testid="step"]')
+  check('Step mode restarts', await until(async () => ((await text(p1, '[data-testid="step-status"]')) ?? '').includes('STEP 1/')))
+  await p1.click('.editor-host .cm-content')
+  await p1.keyboard.type(' ')
+  check('Editing the program ends step mode', await until(async () => (await p1.$('[data-testid="step-status"]')) === null))
+  check('Step line is cleared after editing', await until(async () => (await count(p1, '.cm-step-line')) === 0))
 
   // Canvas controls
   await p1.click('[data-testid="zoom-in"]')

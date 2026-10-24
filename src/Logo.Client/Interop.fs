@@ -25,6 +25,8 @@ type EditorHandle =
     abstract setText: string -> unit
     /// Marks a line (1-based) as erroneous; 0 removes the marker
     abstract setErrorLine: int -> unit
+    /// Marks the current step line (1-based); 0 removes the marker
+    abstract setStepLine: int -> unit
     /// Re-measures the newly visible editor after switching tabs
     abstract setEditorTab: string -> unit
     /// Changes the debounce used for reporting code changes ("live delay")

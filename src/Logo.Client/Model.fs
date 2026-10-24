@@ -92,6 +92,12 @@ type Model =
       Animation: Animation
       /// Playback speed in percent (25 = 0.25×, 100 = 1×, 400 = 4×)
       AnimSpeed: int
+      /// Step-through trace of turtle movements
+      StepActive: bool
+      StepEvents: StepEvent[]
+      StepIndex: int
+      AutoRunBeforeStep: bool
+      AnimateBeforeStep: bool
       Fit: bool
       Zoom: int
       /// Perspective view instead of the top-down projection
@@ -114,6 +120,7 @@ type Model =
 type Msg =
     | CodeChanged of string
     | Run
+    | Step
     | ToggleAutoRun
     | ToggleAnimate
     | StartAnimation
@@ -270,6 +277,14 @@ let private completedAnimation (model: Model) =
 let private stopAnimation (model: Model) =
     { model with Animation = completedAnimation model }
 
+let private endStep (model: Model) =
+    { model with
+        StepActive = false
+        StepEvents = [||]
+        StepIndex = 0
+        AutoRun = model.AutoRunBeforeStep
+        Animate = model.AnimateBeforeStep }
+
 let private animationCommand (model: Model) =
     if model.Animation.Playing then
         Cmd.OfAsync.perform
@@ -330,6 +345,11 @@ let init () : Model * Cmd<Msg> =
       Animate = false
       Animation = { Progress = 0.0; Total = 0.0; Playing = false; Id = 0 }
       AnimSpeed = 100
+      StepActive = false
+      StepEvents = [||]
+      StepIndex = 0
+      AutoRunBeforeStep = false
+      AnimateBeforeStep = false
       Fit = false
       Zoom = 100
       View3D = false
@@ -383,15 +403,52 @@ let private saveName (raw: string) (model: Model) =
 let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     match msg with
     | CodeChanged code ->
-        (if model.AutoRun then execute code model else { model with Code = code }), Cmd.none
+        let m =
+            if model.StepActive then
+                endStep model |> addLog System "Step mode ended: the program changed."
+            else
+                model
+        (if m.AutoRun then execute code m else { m with Code = code }), Cmd.none
     | Run ->
+        let model = if model.StepActive then endStep model else model
         let m = execute model.Code model
         let m, cmd =
             if m.Animate then beginAnimation m
             else m, Cmd.none
         (m |> addLog System $"Program executed · {statsText m.Drawing}"), cmd
+    | Step ->
+        if model.StepActive then
+            if model.StepIndex + 1 < model.StepEvents.Length then
+                { model with StepIndex = model.StepIndex + 1 }, Cmd.none
+            else
+                (endStep model |> addLog System "Step mode finished."), Cmd.none
+        else
+            let result, events = Interpreter.runTraced model.Code
+            let drawing = drawingOf result
+            let total = float (segmentsOf drawing)
+            let next =
+                { model with
+                    Result = result
+                    Drawing = drawing
+                    RunId = model.RunId + 1
+                    Animation = { model.Animation with Progress = total; Total = total; Playing = false }
+                    SessionCode = "" }
+            if events.Length = 0 then
+                (next |> addLog System "No turtle movements to step through."), Cmd.none
+            else
+                ({ next with
+                    StepActive = true
+                    StepEvents = events
+                    StepIndex = 0
+                    AutoRunBeforeStep = model.AutoRun
+                    AnimateBeforeStep = model.Animate
+                    AutoRun = false
+                    Animate = false }
+                 |> addLog System $"Step mode: {events.Length} turtle movements (live run paused)."), Cmd.none
     | ToggleAutoRun ->
-        let enabling = not model.AutoRun
+        let wasStep = model.StepActive
+        let model = if wasStep then endStep model else model
+        let enabling = if wasStep then true else not model.AutoRun
         let next =
             { model with
                 AutoRun = enabling
@@ -401,7 +458,9 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             else stopAnimation next
         (m |> addLog System (if enabling then "Live run enabled." else "Live run disabled.")), Cmd.none
     | ToggleAnimate ->
-        let enabling = not model.Animate
+        let wasStep = model.StepActive
+        let model = if wasStep then endStep model else model
+        let enabling = if wasStep then true else not model.Animate
         let next =
             { model with
                 Animate = enabling
@@ -411,7 +470,9 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
             (m |> addLog System "Animated drawing enabled."), cmd
         else
             (stopAnimation next |> addLog System "Animated drawing disabled."), Cmd.none
-    | StartAnimation -> beginAnimation model
+    | StartAnimation ->
+        let model = if model.StepActive then endStep model else model
+        beginAnimation model
     | AnimTick id ->
         if not model.Animation.Playing || id <> model.Animation.Id then
             model, Cmd.none
@@ -493,6 +554,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         else
             model, Cmd.none
     | ClearCanvas ->
+        let model = if model.StepActive then endStep model else model
         let result = emptyResult model
         let m =
             { model with
@@ -504,6 +566,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         m |> addLog System "Canvas cleared.", Cmd.none
     | ClearConsole -> { model with ReplLog = [] }, Cmd.none
     | ReplSubmit input ->
+        let model = if model.StepActive then endStep model else model
         let command = input.Trim()
         if command = "" then
             model, Cmd.none

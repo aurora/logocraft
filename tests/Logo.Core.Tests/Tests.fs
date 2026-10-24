@@ -354,8 +354,52 @@ repeat 3 [koch 3 200 rt 120]
     Assert.True(r.Paths.Length > 0)
 
 // ---------------------------------------------------------------------------
-// Stateful REPL session
+// Step trace
 // ---------------------------------------------------------------------------
+
+[<Fact>]
+let ``runTraced records movements with source lines`` () =
+    let result, events = runTraced "fd 10\nfd 10"
+    Assert.True(result.Error.IsNone)
+    Assert.Equal(2, events.Length)
+    Assert.Equal(1, events.[0].Line)
+    Assert.Equal(2, events.[1].Line)
+    Assert.Equal(2, events.[0].PointCount)
+    Assert.Equal(3, events.[1].PointCount)
+    close 20.0 events.[1].Turtle.Y
+
+[<Fact>]
+let ``runTraced records pen-up moves without drawing`` () =
+    let result, events = runTraced "pu fd 10 pd fd 10"
+    Assert.True(result.Error.IsNone)
+    Assert.Equal(2, events.Length)
+    Assert.False(events.[0].Turtle.PenDown)
+    Assert.Equal(0, events.[0].PointCount)
+    Assert.Equal(2, events.[1].PointCount)
+    close 20.0 events.[1].Turtle.Y
+
+[<Fact>]
+let ``runTraced records arcs as one move`` () =
+    let result, events = runTraced "arc 360 50"
+    Assert.True(result.Error.IsNone)
+    Assert.Equal(1, events.Length)
+    Assert.Equal(1, result.Paths.Length)
+    Assert.True(events.[0].PointCount > 2)
+
+[<Fact>]
+let ``runTraced keeps the moves before an error`` () =
+    let result, events = runTraced "fd 10\nunknown 5"
+    Assert.True(result.Error.IsSome)
+    Assert.Equal(1, events.Length)
+
+[<Fact>]
+let ``runTraced starts over after clearscreen`` () =
+    let result, events = runTraced "fd 10\nclearscreen\nfd 10"
+    Assert.True(result.Error.IsNone)
+    Assert.Equal(1, events.Length)
+    Assert.Equal(1, result.Paths.Length)
+    close 10.0 events.[0].Turtle.Y
+
 
 [<Fact>]
 let ``session keeps turtle state between commands`` () =

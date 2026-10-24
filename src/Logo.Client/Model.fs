@@ -144,6 +144,8 @@ type Msg =
     | SetSettingsTab of SettingsTab
     | SaveName of string
     | ImportFile
+    | ExportProgram
+    | ExportRoom
     | ExportSvg
     | ExportPng
     | ToggleSidebar
@@ -537,6 +539,16 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     | SetSettingsTab tab -> { model with SettingsTab = tab }, Cmd.none
     | SaveName name -> saveName name model, Cmd.none
     | ImportFile -> model, Cmd.OfFunc.perform importFile () (fun () -> NoOp)
+    | ExportProgram ->
+        Interop.downloadProgram model.Code $"logo-{model.Room}.logo"
+        model |> addLog System "Exported the LOGO program (.logo).", Cmd.none
+    | ExportRoom ->
+        let notes =
+            match Interop.current with
+            | Some editor -> editor.getNotes ()
+            | None -> ""
+        Interop.downloadRoom model.Room model.Code notes $"logocraft-{model.Room}.json"
+        model |> addLog System "Exported the room as JSON (program + notes).", Cmd.none
     | ExportSvg ->
         match Interop.current with
         | Some editor -> editor.exportSvg $"logo-{model.Room}.svg"

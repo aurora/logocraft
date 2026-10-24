@@ -254,6 +254,30 @@ export function exportPng(filename = 'logo-drawing.png') {
   image.src = svgUrl
 }
 
+function downloadText(text, filename, type) {
+  downloadBlob(new Blob([text], { type }), filename)
+}
+
+/** Downloads the LOGO source as a plain .logo file. */
+export function downloadProgram(code, filename) {
+  downloadText(code, filename, 'text/plain;charset=utf-8')
+}
+
+/** Downloads a versioned JSON bundle containing the room, program and notes. */
+export function downloadRoom(room, code, notes, filename) {
+  const url = location.origin + location.pathname + '?room=' + encodeURIComponent(room)
+  const bundle = {
+    format: 'logocraft-room',
+    version: 1,
+    room,
+    url,
+    exportedAt: new Date().toISOString(),
+    program: code,
+    notes
+  }
+  downloadText(JSON.stringify(bundle, null, 2), filename, 'application/json;charset=utf-8')
+}
+
 /** Opens a file picker and returns the chosen text file's contents. */
 export function pickLogoFile(onText) {
   const input = document.createElement('input')
@@ -512,6 +536,10 @@ export function createEditor(codeParent, notesParent, opts) {
       me = { ...me, name: clean, color, colorLight: color + '33' }
       awareness.setLocalStateField('user', me)
       try { sessionStorage.setItem('logo-identity', JSON.stringify(me)) } catch { /* ignore */ }
+    },
+    /** Current content of the shared notes tab. */
+    getNotes() {
+      return ynotes.toString()
     },
     exportSvg,
     exportPng,

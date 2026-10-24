@@ -31,6 +31,8 @@ type EditorHandle =
     abstract setChangeDelay: int -> unit
     /// Changes the display name in Yjs awareness and remembers it locally
     abstract setUserName: string -> unit
+    /// Current content of the shared notes
+    abstract getNotes: unit -> string
     abstract exportSvg: string -> unit
     abstract exportPng: string -> unit
     abstract destroy: unit -> unit
@@ -46,6 +48,14 @@ let pickLogoFile (onText: Action<string>) : unit = jsNative
 /// `onZoom` receives 1 (zoom in) or -1 (zoom out).
 [<Import("attachWheelZoom", "./editor.js")>]
 let attachWheelZoom (element: HTMLElement) (onZoom: Action<int>) : (unit -> unit) = jsNative
+
+/// Downloads the LOGO program as a plain-text file.
+[<Import("downloadProgram", "./editor.js")>]
+let downloadProgram (code: string) (filename: string) : unit = jsNative
+
+/// Downloads a JSON bundle with room metadata, program and notes.
+[<Import("downloadRoom", "./editor.js")>]
+let downloadRoom (room: string) (code: string) (notes: string) (filename: string) : unit = jsNative
 
 /// The display name the user confirmed earlier (empty string on a first visit).
 [<Import("getStoredName", "./editor.js")>]

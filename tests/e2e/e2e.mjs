@@ -242,6 +242,20 @@ try {
   check('SVG export creates a download', await until(async () => (await p1.evaluate(() => window.__downloads)).some(n => n.endsWith('.svg'))))
   await p1.click('[data-testid="export-png"]')
   check('PNG export creates a download', await until(async () => (await p1.evaluate(() => window.__downloads)).some(n => n.endsWith('.png')), 8000))
+  await p1.click('[data-testid="export-menu"]')
+  await p1.waitForSelector('.dropdown-item')
+  await p1.evaluate(() => {
+    const item = [...document.querySelectorAll('.dropdown-item')].find(x => x.textContent.includes('LOGO program'))
+    if (item) item.click()
+  })
+  check('Program export creates a .logo download', await until(async () => (await p1.evaluate(() => window.__downloads)).some(n => n.endsWith('.logo'))))
+  await p1.click('[data-testid="export-menu"]')
+  await p1.waitForSelector('.dropdown-item')
+  await p1.evaluate(() => {
+    const item = [...document.querySelectorAll('.dropdown-item')].find(x => x.textContent.includes('Room bundle'))
+    if (item) item.click()
+  })
+  check('Room export creates a .json download', await until(async () => (await p1.evaluate(() => window.__downloads)).some(n => n.endsWith('.json'))))
 
   // Animated drawing mode
   await p1.click('[data-testid="animate-toggle"]')

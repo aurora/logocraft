@@ -405,6 +405,9 @@ let private exportMenu (model: Model) (dispatch: Msg -> unit) =
                 Html.div [
                     prop.className "dropdown"
                     prop.children [
+                        menuItem dispatch ToggleExportMenu "LOGO program (.logo)" "code_blocks" ExportProgram false
+                        menuItem dispatch ToggleExportMenu "Room bundle (.json)" "data_object" ExportRoom false
+                        Html.div [ prop.className "dropdown-sep" ]
                         menuItem dispatch ToggleExportMenu "Snapshot as SVG" "shape_line" ExportSvg false
                         menuItem dispatch ToggleExportMenu "Snapshot as PNG" "photo_camera" ExportPng false
                     ]
@@ -1249,13 +1252,15 @@ let private exporterPanel (model: Model) (dispatch: Msg -> unit) =
                 prop.className "panel-card"
                 prop.children [
                     Html.div [ prop.className "panel-actions"; prop.children [
-                        btn "btn btn-primary btn-sm" "Download the drawing as SVG" "export-svg-panel" ExportSvg dispatch "shape_line" "Export SVG"
+                        btn "btn btn-primary btn-sm" "Download the LOGO program as .logo" "export-program" ExportProgram dispatch "code_blocks" "Export .logo"
+                        btn "btn btn-ghost btn-sm" "Download the room bundle as JSON" "export-room" ExportRoom dispatch "data_object" "Export room JSON"
+                        btn "btn btn-ghost btn-sm" "Download the drawing as SVG" "export-svg-panel" ExportSvg dispatch "shape_line" "Export SVG"
                         btn "btn btn-ghost btn-sm" "Download the drawing as PNG" "export-png-panel" ExportPng dispatch "photo_camera" "Export PNG"
                         btn "btn btn-ghost btn-sm" "Replace the shared code from a file" "import-file-panel" ImportFile dispatch "file_open" "Import .logo"
                     ] ]
                     Html.p [
                         prop.className "panel-note"
-                        prop.text "Exports contain the current drawing, grid and turtle. The REPL is local: typed commands are not shared with other participants."
+                        prop.text "The .logo file contains the program. The room bundle adds shared notes, the room URL and an export timestamp. Snapshots contain the current drawing, grid and turtle; the REPL stays local."
                     ]
                 ]
             ]

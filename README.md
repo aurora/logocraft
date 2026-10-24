@@ -12,6 +12,8 @@ There is no database and no user management: each browser stores its rooms local
 
 - **LogoCraft Studio UI** — dark IDE workspace with sidebar, editor tabs, telemetry HUD,
   canvas zoom (buttons and scroll wheel), turtle/grid toggles and a room settings panel.
+- **Project export** — download the program as `.logo` or a versioned room bundle (`.json`
+  with program, shared notes, room URL and timestamp), plus SVG/PNG drawing snapshots.
 - **Animated drawing** — reveal the drawing segment by segment while the turtle moves along the
   paths. Toggle *Animate* in the canvas toolbar or replay the current drawing with the play
   button; the playback speed is adjustable from 0.25× to 4×. Animation and live run are
@@ -204,6 +206,8 @@ visible.
 - **REPL is local**: typed commands affect only this browser and are not synchronized.
   *Run* resets the session to the shared program.
 - “Load example” replaces the shared code **for everyone**.
+- Room JSON exports are intended for backup and inspection; only `.logo` files can currently
+  be imported.
 - Seed code is only inserted when a room is still empty after syncing.
 - Single-step execution is not implemented; the *Step* control is disabled.
 - The language is deliberately small: no text output in the canvas (`label`), no filling,

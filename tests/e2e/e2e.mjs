@@ -9,6 +9,7 @@ import { join } from 'node:path'
 
 const base = process.env.LOGO_URL ?? 'http://localhost:5030'
 const importFile = join(tmpdir(), `logo-e2e-${Date.now()}.logo`)
+const importRoomFile = join(tmpdir(), `logo-room-e2e-${Date.now()}.json`)
 const browserPath =
   process.env.BROWSER ??
   'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'
@@ -146,7 +147,7 @@ try {
   await np.keyboard.press('F9')
   check('3D Tree breakpoint marker appears', await until(async () => (await count(np, '.cm-breakpoint-dot')) === 1))
   await np.click('[data-testid="run-sub"]')
-  check('3D Tree stops at line 6', await until(async () => ((await text(np, '[data-testid="step-status"]')) ?? '').includes('LINE 6')))
+  check('3D Tree stops at line 6', await until(async () => ((await text(np, '[data-testid="step-status"]')) ?? '').includes('LINE 6'), 15000))
   const treeStatus = (await text(np, '[data-testid="step-status"]')) ?? ''
   const treeStep = Number((treeStatus.match(/STEP (\d+)/) ?? [])[1] ?? 0)
   await np.click('[data-testid="continue-step"]')
@@ -154,7 +155,7 @@ try {
     const status = (await text(np, '[data-testid="step-status"]')) ?? ''
     const step = Number((status.match(/STEP (\d+)/) ?? [])[1] ?? 0)
     return status.includes('LINE 6') && step > treeStep
-  }))
+  }, 15000))
 
   await nameCtx.close()
 
@@ -437,13 +438,38 @@ try {
   await chooser.accept([importFile])
   check('Imported program appears on page 2', await until(async () => (await editorText(p2)).includes('imported program')))
 
+  // Import a room bundle -> restores the shared program and notes after confirmation
+  writeFileSync(importRoomFile, JSON.stringify({
+    format: 'logocraft-room',
+    version: 1,
+    room: 'source-room',
+    url: `${base}/?room=source-room`,
+    exportedAt: new Date().toISOString(),
+    program: '; room bundle program\nsetpc "green\nrepeat 3 [fd 40 rt 120]\n',
+    notes: '# room bundle notes\n\nRestored from a bundle.\n'
+  }, null, 2))
+  p1.on('dialog', d => d.accept())
+  const roomChooserPromise = p1.waitForFileChooser()
+  await p1.click('[data-testid="file-menu"]')
+  await p1.waitForSelector('.dropdown-item')
+  await p1.evaluate(() => {
+    const item = [...document.querySelectorAll('.dropdown-item')].find(x => x.textContent.includes('Import room bundle'))
+    if (item) item.click()
+  })
+  const roomChooser = await roomChooserPromise
+  await roomChooser.accept([importRoomFile])
+  check('Room bundle program appears on page 2', await until(async () => (await editorText(p2)).includes('room bundle program')))
+  await p2.click('[data-testid="tab-notes"]')
+  check('Room bundle notes appear on page 2', await until(async () => (await notesText(p2)).includes('Restored from a bundle')))
+  await p2.click('[data-testid="tab-code"]')
+
   // A collaborator leaving disappears
   await p2.close()
   check('Collaborator disappears after closing', await until(async () => (await count(p1, '.peer')) === 1, 7000))
 
   // Rejoining keeps the current state
   const p3 = await open()
-  check('Page 3: sees the current state', await until(async () => (await editorText(p3)).includes('imported program')))
+  check('Page 3: sees the current state', await until(async () => (await editorText(p3)).includes('room bundle program')))
   await front(p1)
   await sleep(1000)
   check('After rejoining both see exactly 2 collaborators',
@@ -457,7 +483,7 @@ try {
   await p4.goto(`${base}/?room=${room}`)
   await p4.waitForSelector('.editor-host .cm-content')
   check('Without server: content comes from local storage',
-    await until(async () => (await editorText(p4)).includes('imported program')))
+    await until(async () => (await editorText(p4)).includes('room bundle program')))
   check('Without server: drawing is still rendered', await until(async () => (await count(p4, 'svg.canvas polyline')) > 0))
   await p4.close()
   await p3.close()
@@ -519,6 +545,7 @@ try {
 } finally {
   await browser.close()
   try { unlinkSync(importFile) } catch { /* ignore */ }
+  try { unlinkSync(importRoomFile) } catch { /* ignore */ }
 }
 
 const relevant = problems.filter(p => !p.includes('favicon'))

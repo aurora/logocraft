@@ -22,8 +22,10 @@ There is no database and no user management: each browser stores its rooms local
 - **3D view** — switch the canvas from the top-down projection to a client-side perspective
   view. Drag to orbit, scroll to zoom, and reset the camera; paths are depth-sorted with a
   subtle depth fade, with a ground grid and x/y/z axes for orientation.
-- **Project export** — download the program as `.logo` or a versioned room bundle (`.json`
-  with program, shared notes, room URL and timestamp), plus SVG/PNG drawing snapshots.
+- **Project import/export** — download the program as `.logo` or a versioned room bundle
+  (`.json` with program, shared notes, room URL and timestamp), plus SVG/PNG drawing snapshots.
+  Import a `.logo` file, or restore a room bundle’s program and notes into the current room
+  after confirmation.
 - **Animated drawing** — reveal the drawing segment by segment while the turtle moves along the
   paths. Toggle *Animate* in the canvas toolbar or replay the current drawing with the play
   button; the playback speed is adjustable from 0.25× to 4×. Animation and live run are
@@ -223,8 +225,7 @@ visible.
   8 MB in memory (then it is dropped; connected clients keep the state). Rooms are never
   cleaned up on the server (TODO: TTL, room/count limits, rate limit for unknown rooms).
 - **Browser storage is volatile**: clearing site data or Safari’s long-unused cleanup
-  deletes local rooms. Export/import (implemented for programs, not for the whole room) is
-  the workaround.
+  deletes local rooms. Exporting/importing programs and room bundles is the workaround.
 - “Forget” deletes only the local copy; if the room still exists on the server or on other
   clients, it returns with the ID.
 - **One server instance**: the relay keeps state locally; multiple instances would need
@@ -243,10 +244,9 @@ visible.
 - **REPL is local**: typed commands affect only this browser and are not synchronized.
   *Run* resets the session to the shared program.
 - “Load example” replaces the shared code **for everyone**.
-- Room JSON exports are intended for backup and inspection; only `.logo` files can currently
-  be imported.
+- Importing a room bundle replaces the current room's program and notes for everyone (after a
+  confirmation). It does not create a new room or restore the exported room ID/URL.
 - Seed code is only inserted when a room is still empty after syncing.
-- Single-step execution is not implemented; the *Step* control is disabled.
 - The language is deliberately small: no text output in the canvas (`label`), no filling,
   no `wait`.
 

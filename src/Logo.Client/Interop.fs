@@ -19,7 +19,9 @@ type EditorOptions =
       onRun: Action
       onStatus: Action<string>
       onPeers: Action<string[], string[], int>
-      onToggleBreakpoint: Action<int> }
+      onToggleBreakpoint: Action<int>
+      onRoomImported: Action
+      onImportError: Action<string> }
 
 type EditorHandle =
     /// Replaces the shared code for all contributors
@@ -38,6 +40,8 @@ type EditorHandle =
     abstract setUserName: string -> unit
     /// Current content of the shared notes
     abstract getNotes: unit -> string
+    /// Opens a room-bundle picker and imports program + notes after confirmation
+    abstract pickRoomFile: unit -> unit
     abstract exportSvg: string -> unit
     abstract exportPng: string -> unit
     abstract destroy: unit -> unit

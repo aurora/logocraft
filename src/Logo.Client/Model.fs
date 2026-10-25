@@ -163,6 +163,9 @@ type Msg =
     | SetSettingsTab of SettingsTab
     | SaveName of string
     | ImportFile
+    | ImportRoom
+    | RoomImported
+    | RoomImportFailed of string
     | ExportProgram
     | ExportRoom
     | ExportSvg
@@ -692,6 +695,15 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     | SetSettingsTab tab -> { model with SettingsTab = tab }, Cmd.none
     | SaveName name -> saveName name model, Cmd.none
     | ImportFile -> model, Cmd.OfFunc.perform importFile () (fun () -> NoOp)
+    | ImportRoom ->
+        model,
+        Cmd.OfFunc.perform
+            (fun () -> Interop.current |> Option.iter (fun editor -> editor.pickRoomFile()))
+            ()
+            (fun () -> NoOp)
+    | RoomImported ->
+        model |> addLog System "Imported a room bundle (program + notes).", Cmd.none
+    | RoomImportFailed message -> model |> addLog Error message, Cmd.none
     | ExportProgram ->
         Interop.downloadProgram model.Code $"logo-{model.Room}.logo"
         model |> addLog System "Exported the LOGO program (.logo).", Cmd.none

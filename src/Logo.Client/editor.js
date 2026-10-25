@@ -368,9 +368,13 @@ export function downloadRoom(room, code, notes, filename) {
 
 /** Opens a file picker and returns the chosen text file's contents. */
 export function pickLogoFile(onText) {
+  readTextFile('.logo,.lgo,.txt,text/plain', onText, () => {})
+}
+
+function readTextFile(accept, onText, onError) {
   const input = document.createElement('input')
   input.type = 'file'
-  input.accept = '.logo,.lgo,.txt,text/plain'
+  input.accept = accept
   input.style.display = 'none'
   input.addEventListener('change', () => {
     const file = input.files && input.files[0]
@@ -379,7 +383,10 @@ export function pickLogoFile(onText) {
     reader.onload = () => {
       try { onText(String(reader.result ?? '')) } finally { input.remove() }
     }
-    reader.onerror = () => input.remove()
+    reader.onerror = () => {
+      onError('Could not read the file.')
+      input.remove()
+    }
     reader.readAsText(file)
   })
   document.body.appendChild(input)
@@ -483,7 +490,10 @@ export function attachOrbit(element, onOrbit) {
  *   onChange: (text: string) => void,
  *   onRun: () => void,
  *   onStatus: (status: string) => void,
- *   onPeers: (names: string[], colors: string[], selfIndex: number) => void
+ *   onPeers: (names: string[], colors: string[], selfIndex: number) => void,
+ *   onToggleBreakpoint: (line: number) => void,
+ *   onRoomImported: () => void,
+ *   onImportError: (message: string) => void
  * }} opts
  */
 export function createEditor(codeParent, notesParent, opts) {
@@ -719,6 +729,40 @@ export function createEditor(codeParent, notesParent, opts) {
     /** Current content of the shared notes tab. */
     getNotes() {
       return ynotes.toString()
+    },
+    /** Opens a room-bundle file picker and restores program + notes after confirmation. */
+    pickRoomFile() {
+      readTextFile('.json,application/json', text => {
+        try {
+          const data = JSON.parse(text)
+          if (!data || data.format !== 'logocraft-room') {
+            opts.onImportError('That is not a LogoCraft room bundle.')
+            return
+          }
+          if (data.version !== 1) {
+            opts.onImportError(`Unsupported room bundle version: ${data.version}`)
+            return
+          }
+          if (typeof data.program !== 'string') {
+            opts.onImportError('The room bundle contains no program.')
+            return
+          }
+          const notes = typeof data.notes === 'string' ? data.notes : ''
+          const source = data.room ? `room “${data.room}”` : 'this room bundle'
+          if (!window.confirm(`Import ${source} into room “${opts.room}”? This replaces the shared program and notes for everyone.`)) {
+            return
+          }
+          ydoc.transact(() => {
+            ytext.delete(0, ytext.length)
+            ytext.insert(0, normalizeNewlines(data.program))
+            ynotes.delete(0, ynotes.length)
+            ynotes.insert(0, normalizeNewlines(notes))
+          })
+          opts.onRoomImported()
+        } catch {
+          opts.onImportError('Could not read the room bundle JSON.')
+        }
+      }, message => opts.onImportError(message))
     },
     exportSvg,
     exportPng,

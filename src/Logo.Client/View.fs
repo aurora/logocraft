@@ -709,6 +709,7 @@ let private fileMenu (model: Model) (dispatch: Msg -> unit) =
                         menuItem dispatch ToggleFileMenu "New room" "add" NewRoom false
                         menuItem dispatch ToggleFileMenu "Join room" "login" JoinRoom false
                         menuItem dispatch ToggleFileMenu "Import .logo file" "file_open" ImportFile false
+                        menuItem dispatch ToggleFileMenu "Import room bundle (.json)" "unarchive" ImportRoom false
                         Html.div [ prop.className "dropdown-sep" ]
                         Html.div [ prop.className "dropdown-label"; prop.text "Examples" ]
                         for (name, _) in Examples.all do
@@ -1032,7 +1033,9 @@ let private EditorHost (model: Model) (dispatch: Msg -> unit) =
                   onRun = Action(fun () -> dispatch Run)
                   onStatus = Action<string>(fun s -> dispatch (StatusChanged s))
                   onPeers = Action<string[], string[], int>(fun names colors selfIndex -> dispatch (PeersChanged(names, colors, selfIndex)))
-                  onToggleBreakpoint = Action<int>(fun line -> dispatch (ToggleBreakpoint line)) }
+                  onToggleBreakpoint = Action<int>(fun line -> dispatch (ToggleBreakpoint line))
+                  onRoomImported = Action(fun () -> dispatch RoomImported)
+                  onImportError = Action<string>(fun message -> dispatch (RoomImportFailed message)) }
             let editor = Interop.createEditor codeElement notesElement options
             handle.current <- Some editor
             Interop.current <- Some editor
@@ -1659,10 +1662,11 @@ let private exporterPanel (model: Model) (dispatch: Msg -> unit) =
                         btn "btn btn-ghost btn-sm" "Download the drawing as SVG" "export-svg-panel" ExportSvg dispatch "shape_line" "Export SVG"
                         btn "btn btn-ghost btn-sm" "Download the drawing as PNG" "export-png-panel" ExportPng dispatch "photo_camera" "Export PNG"
                         btn "btn btn-ghost btn-sm" "Replace the shared code from a file" "import-file-panel" ImportFile dispatch "file_open" "Import .logo"
+                        btn "btn btn-ghost btn-sm" "Restore the program and notes from a room bundle" "import-room-panel" ImportRoom dispatch "unarchive" "Import room JSON"
                     ] ]
                     Html.p [
                         prop.className "panel-note"
-                        prop.text "The .logo file contains the program. The room bundle adds shared notes, the room URL and an export timestamp. Snapshots contain the current drawing, grid and turtle; the REPL stays local."
+                        prop.text "The .logo file contains the program. The room bundle adds shared notes, the room URL and an export timestamp; importing it restores the program and notes into the current room after confirmation. Snapshots contain the current drawing, grid and turtle; the REPL stays local."
                     ]
                 ]
             ]

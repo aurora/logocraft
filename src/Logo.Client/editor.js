@@ -4,7 +4,7 @@
 import { EditorState, StateEffect, StateField } from '@codemirror/state'
 import {
   EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter,
-  drawSelection, Decoration
+  drawSelection, Decoration, gutter, GutterMarker
 } from '@codemirror/view'
 import {
   StreamLanguage, syntaxHighlighting, HighlightStyle, bracketMatching, indentOnInput, indentUnit
@@ -134,6 +134,61 @@ const stepLineField = StateField.define({
   },
   provide: f => EditorView.decorations.from(f)
 })
+
+// ---------------------------------------------------------------------------
+// Breakpoints (line-based; the step trace only records movements)
+// ---------------------------------------------------------------------------
+
+const setBreakpointsEffect = StateEffect.define()
+const breakpointField = StateField.define({
+  create: () => new Set(),
+  update(value, tr) {
+    let next = value
+    for (const e of tr.effects) {
+      if (e.is(setBreakpointsEffect)) next = new Set(e.value)
+    }
+    return next
+  }
+})
+
+class BreakpointMarker extends GutterMarker {
+  toDOM() {
+    const dot = document.createElement('span')
+    dot.className = 'cm-breakpoint-dot'
+    return dot
+  }
+}
+
+class BreakpointSpacer extends GutterMarker {
+  toDOM() {
+    const spacer = document.createElement('span')
+    spacer.className = 'cm-breakpoint-spacer'
+    return spacer
+  }
+}
+
+const breakpointMarker = new BreakpointMarker()
+const breakpointSpacer = new BreakpointSpacer()
+
+function breakpointGutter(onToggle) {
+  return gutter({
+    class: 'cm-breakpoint-gutter',
+    lineMarker(view, line) {
+      const number = view.state.doc.lineAt(line.from).number
+      return view.state.field(breakpointField).has(number) ? breakpointMarker : null
+    },
+    lineMarkerChange: update =>
+      update.startState.field(breakpointField) !== update.state.field(breakpointField),
+    initialSpacer: () => breakpointSpacer,
+    domEventHandlers: {
+      mousedown(view, line, event) {
+        event.preventDefault()
+        onToggle(view.state.doc.lineAt(line.from).number)
+        return true
+      }
+    }
+  })
+}
 
 // ---------------------------------------------------------------------------
 // Autocompletion: primitives + user-defined procedures
@@ -548,6 +603,8 @@ export function createEditor(codeParent, notesParent, opts) {
     state: EditorState.create({
       doc: ytext.toString(),
       extensions: [
+        breakpointField,
+        breakpointGutter(opts.onToggleBreakpoint),
         lineNumbers(),
         highlightActiveLineGutter(),
         highlightActiveLine(),
@@ -569,6 +626,14 @@ export function createEditor(codeParent, notesParent, opts) {
         darkTheme,
         keymap.of([
           { key: 'Mod-Enter', run: () => { opts.onRun(); return true } },
+          {
+            key: 'F9',
+            run: targetView => {
+              const line = targetView.state.doc.lineAt(targetView.state.selection.main.head).number
+              opts.onToggleBreakpoint(line)
+              return true
+            }
+          },
           ...closeBracketsKeymap,
           ...yUndoManagerKeymap,
           ...defaultKeymap,
@@ -620,6 +685,10 @@ export function createEditor(codeParent, notesParent, opts) {
         effects.push(EditorView.scrollIntoView(view.state.doc.line(line).from, { y: 'center' }))
       }
       view.dispatch({ effects })
+    },
+    /** Updates the breakpoint dots in the gutter. */
+    setBreakpoints(lineNumbers) {
+      view.dispatch({ effects: setBreakpointsEffect.of(lineNumbers) })
     },
     /** Re-measures the newly visible editor after a tab switch. */
     setEditorTab(tab) {

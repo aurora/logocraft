@@ -720,6 +720,34 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .cm-editor.cm-focused { outline: none; }
 .cm-tooltip { z-index: 70; }
 
+.cm-breakpoint-gutter {
+  width: 16px;
+  cursor: pointer;
+}
+
+.cm-breakpoint-gutter .cm-gutterElement {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cm-breakpoint-gutter .cm-gutterElement:hover { background: rgba(248, 113, 113, .08); }
+
+.cm-breakpoint-dot {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f87171;
+  box-shadow: 0 0 6px rgba(248, 113, 113, .7);
+}
+
+.cm-breakpoint-spacer {
+  display: block;
+  width: 8px;
+  height: 8px;
+}
+
 /* Always show collaborator names at remote cursors (y-codemirror hides them until hover). */
 .cm-editor .cm-ySelectionInfo {
   opacity: 1 !important;

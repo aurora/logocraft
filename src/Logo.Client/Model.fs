@@ -98,6 +98,8 @@ type Model =
       StepIndex: int
       AutoRunBeforeStep: bool
       AnimateBeforeStep: bool
+      /// Locally set line breakpoints (movement lines only)
+      Breakpoints: int list
       Fit: bool
       Zoom: int
       /// Perspective view instead of the top-down projection
@@ -121,6 +123,8 @@ type Msg =
     | CodeChanged of string
     | Run
     | Step
+    | ContinueStep
+    | ToggleBreakpoint of int
     | ToggleAutoRun
     | ToggleAnimate
     | StartAnimation
@@ -285,6 +289,46 @@ let private endStep (model: Model) =
         AutoRun = model.AutoRunBeforeStep
         Animate = model.AnimateBeforeStep }
 
+let private tracedResultModel (model: Model) (result: RunResult) =
+    let drawing = drawingOf result
+    let total = float (segmentsOf drawing)
+    { model with
+        Result = result
+        Drawing = drawing
+        RunId = model.RunId + 1
+        Animation = { model.Animation with Progress = total; Total = total; Playing = false }
+        SessionCode = "" }
+
+let private beginStepAt (model: Model) (result: RunResult) (events: StepEvent[]) (index: int) (message: string) =
+    let next = tracedResultModel model result
+    if events.Length = 0 then
+        (next |> addLog System "No turtle movements to step through."), Cmd.none
+    else
+        let index = max 0 (min index (events.Length - 1))
+        ({ next with
+            StepActive = true
+            StepEvents = events
+            StepIndex = index
+            AutoRunBeforeStep = model.AutoRun
+            AnimateBeforeStep = model.Animate
+            AutoRun = false
+            Animate = false }
+         |> addLog System message), Cmd.none
+
+/// Blank lines have no movement event; snap the breakpoint to the previous (then next) code line.
+let private normalizeBreakpointLine (model: Model) (line: int) =
+    let lines = model.Code.Split('\n')
+    if line < 1 || line > lines.Length then
+        None
+    elif lines.[line - 1].Trim() <> "" then
+        Some line
+    else
+        let isCode candidate = lines.[candidate - 1].Trim() <> ""
+        let previous = [ line - 1 .. -1 .. 1 ] |> List.tryFind isCode
+        match previous with
+        | Some candidate -> Some candidate
+        | None -> [ line + 1 .. lines.Length ] |> List.tryFind isCode
+
 let private animationCommand (model: Model) =
     if model.Animation.Playing then
         Cmd.OfAsync.perform
@@ -350,6 +394,7 @@ let init () : Model * Cmd<Msg> =
       StepIndex = 0
       AutoRunBeforeStep = false
       AnimateBeforeStep = false
+      Breakpoints = []
       Fit = false
       Zoom = 100
       View3D = false
@@ -400,6 +445,37 @@ let private saveName (raw: string) (model: Model) =
         NamePromptOpen = false }
     |> addLog System $"Display name set to “{name}”."
 
+let private continueStep (model: Model) : Model * Cmd<Msg> =
+    if model.StepActive then
+        let next =
+            model.StepEvents
+            |> Array.indexed
+            |> Array.tryFind (fun (index, event) ->
+                index > model.StepIndex
+                && List.contains event.Line model.Breakpoints)
+        match next with
+        | Some(index, _) -> { model with StepIndex = index }, Cmd.none
+        | None -> (endStep model |> addLog System "Continue: end of program."), Cmd.none
+    else
+        let result, events = Interpreter.runTraced model.Code
+        let hit =
+            if events.Length = 0 then None
+            else events |> Array.tryFindIndex (fun event -> List.contains event.Line model.Breakpoints)
+        match hit with
+        | Some index ->
+            beginStepAt
+                model
+                result
+                events
+                index
+                $"Stopped at breakpoint on line {events.[index].Line}."
+        | None ->
+            let next = tracedResultModel model result
+            let message =
+                if model.Breakpoints.IsEmpty then "No breakpoints set; ran to the end."
+                else "No breakpoint hit; breakpoints trigger on executed statements."
+            (next |> addLog System message), Cmd.none
+
 let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     match msg with
     | CodeChanged code ->
@@ -410,12 +486,15 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 model
         (if m.AutoRun then execute code m else { m with Code = code }), Cmd.none
     | Run ->
-        let model = if model.StepActive then endStep model else model
-        let m = execute model.Code model
-        let m, cmd =
-            if m.Animate then beginAnimation m
-            else m, Cmd.none
-        (m |> addLog System $"Program executed · {statsText m.Drawing}"), cmd
+        if not model.Breakpoints.IsEmpty then
+            continueStep model
+        else
+            let model = if model.StepActive then endStep model else model
+            let m = execute model.Code model
+            let m, cmd =
+                if m.Animate then beginAnimation m
+                else m, Cmd.none
+            (m |> addLog System $"Program executed · {statsText m.Drawing}"), cmd
     | Step ->
         if model.StepActive then
             if model.StepIndex + 1 < model.StepEvents.Length then
@@ -424,27 +503,18 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
                 (endStep model |> addLog System "Step mode finished."), Cmd.none
         else
             let result, events = Interpreter.runTraced model.Code
-            let drawing = drawingOf result
-            let total = float (segmentsOf drawing)
-            let next =
-                { model with
-                    Result = result
-                    Drawing = drawing
-                    RunId = model.RunId + 1
-                    Animation = { model.Animation with Progress = total; Total = total; Playing = false }
-                    SessionCode = "" }
-            if events.Length = 0 then
-                (next |> addLog System "No turtle movements to step through."), Cmd.none
-            else
-                ({ next with
-                    StepActive = true
-                    StepEvents = events
-                    StepIndex = 0
-                    AutoRunBeforeStep = model.AutoRun
-                    AnimateBeforeStep = model.Animate
-                    AutoRun = false
-                    Animate = false }
-                 |> addLog System $"Step mode: {events.Length} turtle movements (live run paused)."), Cmd.none
+            beginStepAt model result events 0 $"Step mode: {events.Length} statements (live run paused)."
+    | ContinueStep -> continueStep model
+    | ToggleBreakpoint line ->
+        match normalizeBreakpointLine model line with
+        | None -> model, Cmd.none
+        | Some line ->
+            let breakpoints =
+                if List.contains line model.Breakpoints then
+                    model.Breakpoints |> List.filter (fun candidate -> candidate <> line)
+                else
+                    (line :: model.Breakpoints) |> List.sort
+            { model with Breakpoints = breakpoints }, Cmd.none
     | ToggleAutoRun ->
         let wasStep = model.StepActive
         let model = if wasStep then endStep model else model

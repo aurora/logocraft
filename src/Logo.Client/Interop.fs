@@ -18,7 +18,8 @@ type EditorOptions =
       onChange: Action<string>
       onRun: Action
       onStatus: Action<string>
-      onPeers: Action<string[], string[], int> }
+      onPeers: Action<string[], string[], int>
+      onToggleBreakpoint: Action<int> }
 
 type EditorHandle =
     /// Replaces the shared code for all contributors
@@ -27,6 +28,8 @@ type EditorHandle =
     abstract setErrorLine: int -> unit
     /// Marks the current step line (1-based); 0 removes the marker
     abstract setStepLine: int -> unit
+    /// Updates the breakpoint markers in the gutter
+    abstract setBreakpoints: int[] -> unit
     /// Re-measures the newly visible editor after switching tabs
     abstract setEditorTab: string -> unit
     /// Changes the debounce used for reporting code changes ("live delay")

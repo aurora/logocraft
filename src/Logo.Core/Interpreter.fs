@@ -40,12 +40,12 @@ type RunResult =
       Error: ErrorInfo option
       Steps: int }
 
-/// One recorded turtle movement for the step-through viewer.
+/// One recorded statement for the step-through viewer.
 type StepEvent =
-    { /// 1-based source line of the movement (0 if unknown)
+    { /// 1-based source line of the statement (0 if unknown)
       Line: int
       Turtle: TurtleState
-      /// Number of drawing points that exist after this movement
+      /// Number of drawing points that exist before the statement executes
       PointCount: int }
 
 // ---------------------------------------------------------------------------
@@ -497,14 +497,14 @@ type private Machine() =
     let pitchDeg () =
         Math.Round(Math.Asin(Math.Max(-1.0, Math.Min(1.0, fz))) * 180.0 / Math.PI, 9)
 
-    /// Records the current turtle state for the step-through viewer.
-    let recordStep () =
-        if tracing then
+    /// Records the state before an executed statement for the step-through viewer.
+    let recordStep (lineNumber: int) =
+        if tracing && lineNumber > 0 then
             let heading =
                 if Math.Abs fx < 1e-12 && Math.Abs fy < 1e-12 then 0.0
                 else normalizeAngle (Math.Round(Math.Atan2(fx, fy) * 180.0 / Math.PI, 9))
             stepTrace.Add
-                { Line = line
+                { Line = lineNumber
                   Turtle =
                     { X = x
                       Y = y
@@ -627,10 +627,11 @@ type private Machine() =
 
     member m.ExecStatement(cur: Cursor) : unit =
         let t = cur.Next()
-        if t.Line > 0 then
-            line <- t.Line
+        let statementLine = if t.Line > 0 then t.Line else line
+        line <- statementLine
         match t.Kind with
         | TWord name ->
+            recordStep statementLine
             match m.CallWord(name, cur) with
             | None -> ()
             | Some v ->
@@ -818,11 +819,9 @@ type private Machine() =
         // Turtle
         | "forward", [ d ] ->
             forward (num d)
-            recordStep ()
             None
         | "back", [ d ] ->
             forward (-(num d))
-            recordStep ()
             None
         | "left", [ a ] ->
             turnRight (-(num a))
@@ -852,7 +851,6 @@ type private Machine() =
         | "home", [] ->
             moveTo 0.0 0.0 0.0
             resetOrientation ()
-            recordStep ()
             None
         | "clearscreen", [] ->
             resetTurtle ()
@@ -874,23 +872,18 @@ type private Machine() =
             None
         | "setxy", [ nx; ny ] ->
             moveTo (num nx) (num ny) z
-            recordStep ()
             None
         | "setx", [ nx ] ->
             moveTo (num nx) y z
-            recordStep ()
             None
         | "sety", [ ny ] ->
             moveTo x (num ny) z
-            recordStep ()
             None
         | "setz", [ nz ] ->
             moveTo x y (num nz)
-            recordStep ()
             None
         | "setxyz", [ nx; ny; nz ] ->
             moveTo (num nx) (num ny) (num nz)
-            recordStep ()
             None
         | "setheading", [ a ] ->
             // richtet die Turtle waagerecht aus (Neigung und Rollen werden zurückgesetzt)
@@ -924,7 +917,6 @@ type private Machine() =
                 if pointCount > maxPoints then
                     fail "The drawing is too large (too many lines)"
                 paths.Add { Color = color; Width = width; Points = pts }
-                recordStep ()
             None
         // Ausgabe
         | "print", [ v ] ->
@@ -1206,7 +1198,7 @@ type Session() =
 /// Runs a Logo program and returns drawing, output and an optional error.
 let run (source: string) : RunResult = Session().Run source
 
-/// Runs a program and records every turtle movement for the step-through viewer.
+/// Runs a program and records every executed statement for the step-through viewer.
 let runTraced (source: string) : RunResult * StepEvent[] =
     let m = Machine()
     m.EnableTracing ()

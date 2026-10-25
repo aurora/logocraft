@@ -951,14 +951,22 @@ let private subheader (model: Model) (dispatch: Msg -> unit) =
                     Html.div [
                         prop.className "run-cluster"
                         prop.children [
-                            btn "btn btn-primary btn-sm" "Run program (Ctrl+Enter)" "run-sub" Run dispatch "play_arrow" "Run"
+                            btn "btn btn-primary btn-sm" (if model.Breakpoints.IsEmpty then "Run program (Ctrl+Enter)" else "Run program and stop at the first breakpoint (Ctrl+Enter)") "run-sub" Run dispatch "play_arrow" "Run"
                             Html.button [
                                 prop.className ("btn btn-ghost btn-sm" + (if model.StepActive then " active" else ""))
                                 prop.type'.button
-                                prop.title (if model.StepActive then "Next turtle movement" else "Step through turtle movements")
+                                prop.title (if model.StepActive then "Next executed statement" else "Step through executed statements (F9 or gutter click toggles a breakpoint)")
                                 prop.custom ("data-testid", "step")
                                 prop.onClick (fun _ -> dispatch Step)
                                 prop.children [ icon "step_over"; Html.span [ prop.text (if model.StepActive then "Next" else "Step") ] ]
+                            ]
+                            Html.button [
+                                prop.className "btn btn-ghost btn-sm"
+                                prop.type'.button
+                                prop.title "Continue to the next breakpoint (runs to the end if none)"
+                                prop.custom ("data-testid", "continue-step")
+                                prop.onClick (fun _ -> dispatch ContinueStep)
+                                prop.children [ icon "skip_next"; Html.span [ prop.text "Continue" ] ]
                             ]
                             btn "btn btn-ghost btn-sm danger" "Clear the canvas" "stop" ClearCanvas dispatch "stop" ""
                         ]
@@ -1023,7 +1031,8 @@ let private EditorHost (model: Model) (dispatch: Msg -> unit) =
                   onChange = Action<string>(fun text -> dispatch (CodeChanged text))
                   onRun = Action(fun () -> dispatch Run)
                   onStatus = Action<string>(fun s -> dispatch (StatusChanged s))
-                  onPeers = Action<string[], string[], int>(fun names colors selfIndex -> dispatch (PeersChanged(names, colors, selfIndex))) }
+                  onPeers = Action<string[], string[], int>(fun names colors selfIndex -> dispatch (PeersChanged(names, colors, selfIndex)))
+                  onToggleBreakpoint = Action<int>(fun line -> dispatch (ToggleBreakpoint line)) }
             let editor = Interop.createEditor codeElement notesElement options
             handle.current <- Some editor
             Interop.current <- Some editor
@@ -1053,6 +1062,13 @@ let private EditorHost (model: Model) (dispatch: Msg -> unit) =
         (fun () ->
             handle.current |> Option.iter (fun editor -> editor.setStepLine stepLine)),
         [| box stepLine |]
+    )
+
+    React.useEffect (
+        (fun () ->
+            handle.current
+            |> Option.iter (fun editor -> editor.setBreakpoints (List.toArray model.Breakpoints))),
+        [| box model.Breakpoints |]
     )
 
     React.useEffect (

@@ -358,47 +358,80 @@ repeat 3 [koch 3 200 rt 120]
 // ---------------------------------------------------------------------------
 
 [<Fact>]
-let ``runTraced records movements with source lines`` () =
+let ``runTraced records statements with source lines`` () =
     let result, events = runTraced "fd 10\nfd 10"
     Assert.True(result.Error.IsNone)
     Assert.Equal(2, events.Length)
     Assert.Equal(1, events.[0].Line)
     Assert.Equal(2, events.[1].Line)
-    Assert.Equal(2, events.[0].PointCount)
-    Assert.Equal(3, events.[1].PointCount)
-    close 20.0 events.[1].Turtle.Y
+    Assert.Equal(0, events.[0].PointCount)
+    Assert.Equal(2, events.[1].PointCount)
+    close 0.0 events.[0].Turtle.Y
+    close 10.0 events.[1].Turtle.Y
+    close 20.0 result.Turtle.Y
+
+[<Fact>]
+let ``runTraced records non-drawing statements`` () =
+    let result, events = runTraced "make \"x 5\nfd 10\nrt 90"
+    Assert.True(result.Error.IsNone)
+    Assert.Equal(3, events.Length)
+    Assert.Equal(1, events.[0].Line)
+    Assert.Equal(0, events.[0].PointCount)
+    Assert.Equal(3, events.[2].Line)
+
+[<Fact>]
+let ``runTraced records statements inside procedures`` () =
+    let result, events =
+        runTraced
+            """
+to box
+  fd 10
+  rt 90
+  fd 10
+end
+box
+"""
+    Assert.True(result.Error.IsNone)
+    Assert.Equal(4, events.Length)
+    Assert.Equal(7, events.[0].Line)
+    Assert.Equal(3, events.[1].Line)
+    Assert.Equal(4, events.[2].Line)
+    Assert.Equal(5, events.[3].Line)
 
 [<Fact>]
 let ``runTraced records pen-up moves without drawing`` () =
     let result, events = runTraced "pu fd 10 pd fd 10"
     Assert.True(result.Error.IsNone)
-    Assert.Equal(2, events.Length)
-    Assert.False(events.[0].Turtle.PenDown)
-    Assert.Equal(0, events.[0].PointCount)
-    Assert.Equal(2, events.[1].PointCount)
-    close 20.0 events.[1].Turtle.Y
+    Assert.Equal(4, events.Length)
+    Assert.False(events.[1].Turtle.PenDown)
+    Assert.Equal(0, events.[3].PointCount)
+    Assert.Equal(1, result.Paths.Length)
+    close 20.0 result.Turtle.Y
 
 [<Fact>]
-let ``runTraced records arcs as one move`` () =
+let ``runTraced records arcs as a statement`` () =
     let result, events = runTraced "arc 360 50"
     Assert.True(result.Error.IsNone)
     Assert.Equal(1, events.Length)
+    Assert.Equal(0, events.[0].PointCount)
     Assert.Equal(1, result.Paths.Length)
-    Assert.True(events.[0].PointCount > 2)
 
 [<Fact>]
-let ``runTraced keeps the moves before an error`` () =
+let ``runTraced keeps the statements before an error`` () =
     let result, events = runTraced "fd 10\nunknown 5"
     Assert.True(result.Error.IsSome)
-    Assert.Equal(1, events.Length)
+    Assert.Equal(2, events.Length)
+    Assert.Equal(2, events.[1].Line)
 
 [<Fact>]
 let ``runTraced starts over after clearscreen`` () =
     let result, events = runTraced "fd 10\nclearscreen\nfd 10"
     Assert.True(result.Error.IsNone)
     Assert.Equal(1, events.Length)
+    Assert.Equal(3, events.[0].Line)
+    Assert.Equal(0, events.[0].PointCount)
     Assert.Equal(1, result.Paths.Length)
-    close 10.0 events.[0].Turtle.Y
+    close 10.0 result.Turtle.Y
 
 
 [<Fact>]

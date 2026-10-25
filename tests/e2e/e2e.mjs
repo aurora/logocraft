@@ -137,6 +137,25 @@ try {
   }))
   await np.click('[data-testid="view-3d"]')
 
+  // A breakpoint on the recursive fd line stops again on the next recursion
+  await np.click('.editor-host .cm-content')
+  await np.keyboard.down('Control')
+  await np.keyboard.press('Home')
+  await np.keyboard.up('Control')
+  for (let i = 0; i < 5; i++) await np.keyboard.press('ArrowDown')
+  await np.keyboard.press('F9')
+  check('3D Tree breakpoint marker appears', await until(async () => (await count(np, '.cm-breakpoint-dot')) === 1))
+  await np.click('[data-testid="run-sub"]')
+  check('3D Tree stops at line 6', await until(async () => ((await text(np, '[data-testid="step-status"]')) ?? '').includes('LINE 6')))
+  const treeStatus = (await text(np, '[data-testid="step-status"]')) ?? ''
+  const treeStep = Number((treeStatus.match(/STEP (\d+)/) ?? [])[1] ?? 0)
+  await np.click('[data-testid="continue-step"]')
+  check('Continue stops at the next recursion', await until(async () => {
+    const status = (await text(np, '[data-testid="step-status"]')) ?? ''
+    const step = Number((status.match(/STEP (\d+)/) ?? [])[1] ?? 0)
+    return status.includes('LINE 6') && step > treeStep
+  }))
+
   await nameCtx.close()
 
   const p1 = await open()
@@ -252,19 +271,16 @@ try {
   }))
   check('REPL is local (page 2 drawing unchanged)', (await count(p2, 'svg.canvas polyline')) === p2BeforeRepl)
 
-  // Turtle-movement stepping
+  // Statement stepping
   check('Step button is enabled', (await p1.$eval('[data-testid="step"]', el => el.disabled)) === false)
   await p1.click('[data-testid="step"]')
-  check('Step mode starts at the first movement', await until(async () => ((await text(p1, '[data-testid="step-status"]')) ?? '').includes('STEP 1/')))
+  check('Step mode starts at the first statement', await until(async () => ((await text(p1, '[data-testid="step-status"]')) ?? '').includes('STEP 1/')))
   check('Step line is highlighted in the editor', await until(async () => (await count(p1, '.cm-step-line')) === 1))
-  const stepPoints1 = await p1.$$eval('svg.canvas polyline', els => els.reduce((n, e) => n + ((e.getAttribute('points') || '').trim().split(/\s+/).length), 0))
   const stepStatus = (await text(p1, '[data-testid="step-status"]')) ?? ''
   const totalSteps = Number((stepStatus.match(/\/(\d+)/) ?? [])[1] ?? 0)
-  check('Step trace has movements', totalSteps > 1)
+  check('Step trace includes non-drawing statements', totalSteps > 5)
   await p1.click('[data-testid="step"]')
   check('Step advances', await until(async () => ((await text(p1, '[data-testid="step-status"]')) ?? '').includes('STEP 2/')))
-  const stepPoints2 = await p1.$$eval('svg.canvas polyline', els => els.reduce((n, e) => n + ((e.getAttribute('points') || '').trim().split(/\s+/).length), 0))
-  check('Step reveals more drawing', stepPoints2 > stepPoints1)
   for (let i = 2; i < totalSteps; i++) {
     await p1.click('[data-testid="step"]')
     await until(async () => ((await text(p1, '[data-testid="step-status"]')) ?? '').includes(`STEP ${i + 1}/`))
@@ -279,6 +295,34 @@ try {
   await p1.keyboard.type(' ')
   check('Editing the program ends step mode', await until(async () => (await p1.$('[data-testid="step-status"]')) === null))
   check('Step line is cleared after editing', await until(async () => (await count(p1, '.cm-step-line')) === 0))
+
+  // Breakpoints, Run and Continue
+  await p1.click('.editor-host .cm-content')
+  await p1.keyboard.down('Control')
+  await p1.keyboard.press('End')
+  await p1.keyboard.up('Control')
+  await p1.keyboard.press('ArrowUp')
+  await p1.keyboard.press('F9')
+  check('Breakpoint marker appears', await until(async () => (await count(p1, '.cm-breakpoint-dot')) === 1))
+  await p1.click('[data-testid="run-sub"]')
+  check('Run stops at the breakpoint', await until(async () => ((await text(p1, '[data-testid="step-status"]')) ?? '').includes('LINE 4')))
+  const firstBreakStatus = (await text(p1, '[data-testid="step-status"]')) ?? ''
+  const firstBreakStep = Number((firstBreakStatus.match(/STEP (\d+)/) ?? [])[1] ?? 0)
+  await p1.click('[data-testid="continue-step"]')
+  check('Continue stops at the next breakpoint hit', await until(async () => {
+    const status = (await text(p1, '[data-testid="step-status"]')) ?? ''
+    const step = Number((status.match(/STEP (\d+)/) ?? [])[1] ?? 0)
+    return status.includes('LINE 4') && step > firstBreakStep
+  }))
+  await p1.click('.editor-host .cm-content')
+  await p1.keyboard.down('Control')
+  await p1.keyboard.press('End')
+  await p1.keyboard.up('Control')
+  await p1.keyboard.press('ArrowUp')
+  await p1.keyboard.press('F9')
+  check('Breakpoint can be removed', await until(async () => (await count(p1, '.cm-breakpoint-dot')) === 0))
+  await p1.click('[data-testid="run-sub"]')
+  check('Run without breakpoints ends step mode', await until(async () => (await p1.$('[data-testid="step-status"]')) === null))
 
   // Canvas controls
   await p1.click('[data-testid="zoom-in"]')

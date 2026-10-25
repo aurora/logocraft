@@ -14,10 +14,11 @@ There is no database and no user management: each browser stores its rooms local
   canvas zoom (buttons and scroll wheel), turtle/grid toggles and a room settings panel.
   The LOGO editor highlights syntax, completes primitives and auto-indents list brackets
   and `to … end` blocks.
-- **Step mode** — step through the program's turtle movements (including pen-up jumps) one at
-  a time. The current source line is highlighted and scrolled into view, and the canvas shows
-  the drawing up to that point. Stepping pauses live run/animation and ends automatically when
-  the shared code changes.
+- **Step mode & breakpoints** — step through every executed statement, including turns and
+  assignments; the drawing updates whenever a statement draws. Click the gutter (or press
+  **F9**) to mark a line, then use *Run* or *Continue* to stop at the first/next breakpoint.
+  The current source line is highlighted and scrolled into view. Stepping pauses live
+  run/animation and ends automatically when the shared code changes.
 - **3D view** — switch the canvas from the top-down projection to a client-side perspective
   view. Drag to orbit, scroll to zoom, and reset the camera; paths are depth-sorted with a
   subtle depth fade, with a ground grid and x/y/z axes for orientation.
@@ -103,10 +104,14 @@ flowchart LR
   around the drawing centre, perspective-projected, depth-sorted and drawn with a depth-based
   opacity. The interpreter is unchanged; the camera is an orbit (yaw/pitch) controlled by
   dragging the canvas.
-- **Step mode** uses `Interpreter.runTraced`: the program runs once and records every turtle
-  movement with its source line and drawing-point count. The client replays that trace, draws
-  the point prefix and highlights the line in CodeMirror. It is movement-level stepping, not a
-  full debugger.
+- **Step mode** uses `Interpreter.runTraced`: the program runs once and records every executed
+  statement (line, turtle state and drawing-point count) just before it runs. The client replays
+  that trace, draws the point prefix and highlights the current line in CodeMirror. It is a
+  statement stepper, not a full debugger.
+- **Breakpoints** are local line numbers. `Run` stops at the first breakpoint and `Continue`
+  walks the statement trace to the next hit, including the next loop iteration or recursive
+  call; `Step` then advances one statement at a time. Blank lines snap to the previous/next code
+  line when toggled. Declarations and comments are not executed and therefore never hit.
 - **Inviting**: *Copy link* copies the room URL; *Join room* accepts a room ID or a full
   invite link. *New room* creates a room, *Project Files* switches rooms, and *Forget*
   removes the local copy only.
@@ -229,9 +234,12 @@ visible.
   room visibility in the settings panel are not backed by the server.
 - **3D view** has no hidden-line removal or panning; overlapping lines remain visible through
   each other. It is an inspection view, not a full 3D engine.
-- **Step mode is movement-level**: turns, assignments and output do not get their own step, and
-  there is no backward stepping or variable inspection. Starting a step pauses live run; any
-  code change (local or remote) ends the step session because its trace would be stale.
+- **Step mode is statement-level**: there is no backward stepping or variable inspection.
+  Starting a step pauses live run; any code change (local or remote) ends the step session
+  because its trace would be stale. Breakpoints are not synced between collaborators and do not
+  follow lines when the code is edited. Lines inside inline list literals (`repeat 4 [ fd 10 ]`)
+  are reported with the control statement's line because the interpreter does not retain line
+  numbers inside list values.
 - **REPL is local**: typed commands affect only this browser and are not synchronized.
   *Run* resets the session to the shared program.
 - “Load example” replaces the shared code **for everyone**.

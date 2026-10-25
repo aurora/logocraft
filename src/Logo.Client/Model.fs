@@ -318,7 +318,7 @@ let private beginStepAt (model: Model) (result: RunResult) (events: StepEvent[])
             Animate = false }
          |> addLog System message), Cmd.none
 
-/// Blank lines have no movement event; snap the breakpoint to the previous (then next) code line.
+/// Blank lines have no statement event; snap the breakpoint to the previous (then next) code line.
 let private normalizeBreakpointLine (model: Model) (line: int) =
     let lines = model.Code.Split('\n')
     if line < 1 || line > lines.Length then

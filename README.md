@@ -39,7 +39,8 @@ There is no database and no user management: each browser stores its rooms local
   keep their state between submissions. The REPL is local to each browser; press **Run** to
   reset it to the program above.
 - **Vector export** — snapshot the current canvas as SVG or PNG.
-- **Import** — load a `.logo`, `.lgo` or plain-text program; it replaces the shared code.
+- **Import** — load a `.logo`, `.lgo` or plain-text program, or restore a room bundle
+  (program + notes).
 - **Rooms** — four-word room IDs, invite links, local room list, IndexedDB persistence.
 - **English UI and interpreter messages.**
 
@@ -165,9 +166,9 @@ A practical subset of UCBLogo; case does not matter and `;` starts a comment.
 
 | Area | Commands |
 |---|---|
-| Movement | `forward` `fd`, `back` `bk`, `left` `lt`, `right` `rt`, `home`, `setxy`, `setx`, `sety`, `setheading` `seth`, `arc angle radius` |
+| Movement | `forward` `fd`, `back` `bk`, `left` `lt`, `right` `rt`, `home`, `setxy`, `setx`, `sety`, `setheading` `seth`, `heading`, `xcor`, `ycor`, `arc angle radius` |
 | 3D | `pitchup`, `pitchdown`, `rollright`, `rollleft`, `setz`, `setxyz`, `zcor`, `pitch` (see below) |
-| Pen | `penup` `pu`, `pendown` `pd`, `setpencolor` `setpc` (name, 0–15 or `[r g b]` with 0–100), `setpensize` `setps` |
+| Pen | `penup` `pu`, `pendown` `pd`, `pendown?` `pendownp`, `setpencolor` `setpc` (name, 0–15 or `[r g b]` with 0–100), `setpensize` `setps` |
 | Screen | `clearscreen` `cs`, `clean`, `hideturtle` `ht`, `showturtle` `st` |
 | Control | `repeat`, `if`, `ifelse`, `for [i start end [step]]`, `while [condition] […]`, `run`, `stop`, `output` `op`, `repcount` |
 | Variables | `make "name value`, `:name`, `local` |
@@ -249,6 +250,14 @@ visible.
 - Seed code is only inserted when a room is still empty after syncing.
 - The language is deliberately small: no text output in the canvas (`label`), no filling,
   no `wait`.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+Copyright (c) 2026 Harald Lapp
+
+## Credits
 
 The word list for room IDs is the [EFF Short Wordlist #1](https://www.eff.org/dice)
 (CC BY 3.0 US, without `yo-yo`).

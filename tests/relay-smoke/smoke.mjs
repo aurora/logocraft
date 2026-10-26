@@ -29,6 +29,17 @@ const waitSynced = async (c, ms = 3000) => {
 
 const names = c => [...c.provider.awareness.getStates().values()].map(s => s.user?.name).filter(Boolean).sort()
 
+// Cross-origin browser connections are rejected before a room is created.
+const rejectedOrigin = await new Promise(resolve => {
+  const ws = new WebSocket(`${url}/${room}-origin`, { headers: { Origin: 'https://evil.example' } })
+  const done = value => { try { ws.terminate() } catch { /* ignore */ } ; resolve(value) }
+  ws.on('open', () => done(false))
+  ws.on('unexpected-response', (_req, res) => done(res.statusCode === 403))
+  ws.on('error', () => done(true))
+  setTimeout(() => done(false), 3000)
+})
+check('Cross-origin WebSocket is rejected', rejectedOrigin)
+
 // A connects and writes
 const a = client('A')
 check('A is synced (server replies with an empty SyncStep2)', await waitSynced(a))

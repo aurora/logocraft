@@ -149,6 +149,9 @@ cd src/Logo.Client && npm run dev        # terminal 2: Fable watch + Vite on :51
 
 Vite proxies `/ws` to `:5030`.
 
+If the proxy rewrites the `Host` header, start the server with
+`LOGO_ALLOWED_ORIGINS=http://localhost:5173` (comma-separated for multiple origins).
+
 ## Tests
 
 ```sh
@@ -159,6 +162,52 @@ cd tests/relay-smoke && npm install && npm test           # Yjs relay
 cd tests/e2e         && npm install && npm test           # browser, multiple tabs
 #   Browser: default is Edge on Windows; otherwise set BROWSER=<path to chrome/msedge>
 ```
+
+### Relay limits
+
+The relay is hardened for demo use. All limits are per process and can be overridden with
+environment variables in Coolify:
+
+| Variable | Default | Meaning |
+|---|---:|---|
+| `LOGO_MAX_ROOMS` | `100` | Rooms kept by this process |
+| `LOGO_MAX_PEERS_PER_ROOM` | `24` | Concurrent WebSocket clients per room |
+| `LOGO_MAX_CONNECTIONS` | `128` | Concurrent WebSocket clients in total |
+| `LOGO_MAX_MESSAGE_BYTES` | `1048576` | Maximum single WebSocket message |
+| `LOGO_MAX_LOG_BYTES` | `4194304` | Stored Yjs update bytes per room |
+| `LOGO_MAX_TOTAL_LOG_BYTES` | `67108864` | Stored Yjs update bytes across all rooms |
+| `LOGO_MAX_LOG_ENTRIES` | `4096` | Stored updates per room (object overhead guard) |
+| `LOGO_MAX_AWARENESS_ENTRIES` | `64` | Awareness entries per room |
+| `LOGO_MAX_AWARENESS_ENTRIES_PER_PEER` | `8` | New awareness IDs one connection may add |
+| `LOGO_MAX_AWARENESS_STATE_BYTES` | `8192` | Maximum JSON state per awareness entry |
+| `LOGO_MAX_MESSAGES_PER_SECOND` | `30` | Per-connection message rate (`0` disables) |
+| `LOGO_MAX_MESSAGE_BURST` | `60` | Per-connection message burst |
+| `LOGO_MAX_BYTES_PER_SECOND` | `1048576` | Per-connection byte rate (`0` disables) |
+| `LOGO_MAX_BYTE_BURST` | `4194304` | Per-connection byte burst |
+| `LOGO_ROOM_TTL_MINUTES` | `60` | Evict empty rooms after this time (`0` disables) |
+| `LOGO_ALLOWED_ORIGINS` | empty | Comma-separated exact origins, e.g. `https://logo.example.com` |
+
+- Empty `LOGO_ALLOWED_ORIGINS` means **same-host** browser origins are accepted. Requests
+  without an `Origin` header (CLI clients, tests) are allowed; the check is not authentication.
+- When a room, connection, message or rate cap is reached, the server closes the WebSocket
+  with `PolicyViolation`. Oversized awareness entries are ignored; the connection stays open.
+- Run the container with a memory limit (e.g. 512 MB) so an overload cannot pressure the host.
+- These guards reduce DoS and storage abuse; they do not replace authentication or a
+  reverse-proxy rate limit per IP.
+
+### Security notes
+
+- **No authentication**: the room link is the only access control. Anyone with the link can
+  read and write the shared program and notes; do not use this for confidential data.
+- The same-host `Origin` check blocks ordinary cross-site browser connections, but a
+  non-browser client can omit or forge the header. It is not an authorization boundary.
+- Display names, colors and cursor positions are client-provided and can be spoofed by
+  another room member. The system is a collaboration demo, not a trusted identity system.
+- Remote awareness colors are rendered as inline CSS in the cursor labels. A malicious room
+  member can inject CSS declarations (UI spoofing/tracking). A Content Security Policy and
+  stricter color validation are still TODO.
+- Serving over HTTPS and not exposing port 8080 directly is still required; the app itself
+  does not terminate TLS. Keep the base images and .NET runtime patched.
 
 ## The language
 
@@ -222,18 +271,23 @@ visible.
 ## Known limits of the prototype
 
 - **No server-side persistence**: the relay state is lost when the server restarts; browsers
-  that have the room locally sync it back on connect. The update log per room is capped at
-  8 MB in memory (then it is dropped; connected clients keep the state). Rooms are never
-  cleaned up on the server (TODO: TTL, room/count limits, rate limit for unknown rooms).
+  that have the room locally sync it back on connect. The update log is capped per room
+  (4 MB / 4096 entries) and across all rooms (64 MB); at a cap the room log is cleared or the
+  update is not retained, while connected clients keep it. Empty rooms are evicted after
+  60 minutes.
 - **Browser storage is volatile**: clearing site data or Safari’s long-unused cleanup
   deletes local rooms. Exporting/importing programs and room bundles is the workaround.
 - “Forget” deletes only the local copy; if the room still exists on the server or on other
   clients, it returns with the ID.
 - **One server instance**: the relay keeps state locally; multiple instances would need
   e.g. Redis.
+- **No per-IP limits**: the built-in caps are per process, per room and per connection. Put
+  Traefik/Cloudflare rate limits in front of the app; client IPs behind the proxy are not
+  used for app-level throttling.
 - **No access control**: anyone with the URL can read and write. Names are display-only and
   not unique; colors and cursor labels help tell collaborators apart. Roles, passwords and
-  room visibility in the settings panel are not backed by the server.
+  room visibility in the settings panel are not backed by the server. The relay limits are
+  not a substitute for authentication.
 - **3D view** has no hidden-line removal or panning; overlapping lines remain visible through
   each other. It is an inspection view, not a full 3D engine.
 - **Step mode is statement-level**: there is no backward stepping or variable inspection.

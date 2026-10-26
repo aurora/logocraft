@@ -115,6 +115,8 @@ type Model =
       ReplLog: ReplEntry list
       SettingsOpen: bool
       SettingsTab: SettingsTab
+      /// Show the about dialog
+      AboutOpen: bool
       FileMenuOpen: bool
       ExportMenuOpen: bool
       SidebarOpen: bool }
@@ -161,6 +163,8 @@ type Msg =
     | OpenSettings
     | CloseSettings
     | SetSettingsTab of SettingsTab
+    | OpenAbout
+    | CloseAbout
     | SaveName of string
     | ImportFile
     | ImportRoom
@@ -411,6 +415,7 @@ let init () : Model * Cmd<Msg> =
       ReplLog = [ entry System $"Workspace #{room} ready. Waiting for the relay…" ]
       SettingsOpen = false
       SettingsTab = GeneralTab
+      AboutOpen = false
       FileMenuOpen = false
       ExportMenuOpen = false
       SidebarOpen = false },
@@ -693,6 +698,8 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
         { model with SettingsOpen = true; SettingsTab = GeneralTab }, Cmd.none
     | CloseSettings -> { model with SettingsOpen = false }, Cmd.none
     | SetSettingsTab tab -> { model with SettingsTab = tab }, Cmd.none
+    | OpenAbout -> { model with AboutOpen = true }, Cmd.none
+    | CloseAbout -> { model with AboutOpen = false }, Cmd.none
     | SaveName name -> saveName name model, Cmd.none
     | ImportFile -> model, Cmd.OfFunc.perform importFile () (fun () -> NoOp)
     | ImportRoom ->

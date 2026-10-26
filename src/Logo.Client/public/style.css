@@ -1393,6 +1393,113 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 }
 
 /* --------------------------------------------------------------------------
+   About dialog
+   -------------------------------------------------------------------------- */
+
+.modal.about-modal { width: min(620px, 100%); }
+
+.about-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.about-mark {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--primary), var(--primary-container));
+  color: #03251a;
+  font-family: var(--font-mono);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.about-note {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255, 255, 255, .1);
+  background: var(--surface-container);
+  line-height: 1.55;
+}
+
+.about-note:first-child { margin-top: 0; }
+
+.about-note .ms {
+  flex: 0 0 auto;
+  font-size: 17px;
+  color: var(--secondary);
+}
+
+.about-note-title { font-size: 11px; font-weight: 600; color: var(--on-surface); }
+.about-note-text { margin-top: 2px; font-size: 11px; color: var(--on-surface-variant); }
+
+.about-note.warning {
+  border-color: rgba(251, 191, 36, .28);
+  background: rgba(251, 191, 36, .08);
+}
+
+.about-note.warning .ms { color: var(--warning); }
+.about-note.warning .about-note-title { color: #fde68a; }
+.about-note.warning .about-note-text { color: #fde68a; }
+
+.about-rows { display: grid; gap: 6px; }
+
+.about-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 11px;
+}
+
+.about-row-label {
+  flex: 0 0 86px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--outline);
+}
+
+.about-row-value { color: var(--on-surface); }
+
+.about-link { color: var(--secondary); text-decoration: none; }
+.about-link:hover { text-decoration: underline; }
+
+.about-license-details { margin-top: 12px; }
+
+.about-license-details summary {
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--on-surface-variant);
+}
+
+.about-license-details summary:hover { color: var(--on-surface); }
+
+.about-license {
+  margin: 8px 0 0;
+  max-height: 160px;
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255, 255, 255, .07);
+  background: var(--surface-container-lowest);
+  color: var(--on-surface-variant);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+/* --------------------------------------------------------------------------
    Responsive
    -------------------------------------------------------------------------- */
 

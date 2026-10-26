@@ -779,6 +779,14 @@ let private topbar (model: Model) (dispatch: Msg -> unit) =
                     presencePills model
                     fileMenu model dispatch
                     exportMenu model dispatch
+                    Html.button [
+                        prop.className "icon-btn"
+                        prop.type'.button
+                        prop.title "About LogoCraft Studio"
+                        prop.custom ("data-testid", "about-open")
+                        prop.onClick (fun _ -> dispatch OpenAbout)
+                        prop.children [ icon "info" ]
+                    ]
                     Html.div [
                         prop.className "avatar"
                         prop.title (if model.MyName = "" then "You" else model.MyName)
@@ -1813,6 +1821,161 @@ let private NameField (model: Model) (dispatch: Msg -> unit) =
         ]
     ]
 
+// ---------------------------------------------------------------------------
+// About dialog
+// ---------------------------------------------------------------------------
+
+let private mitLicenseText =
+    """MIT License
+
+Copyright (c) 2026– Harald Lapp
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE."""
+
+let private aboutNote (iconName: string) (cls: string) (title: string) (text: string) =
+    Html.div [
+        prop.className ("about-note " + cls)
+        prop.children [
+            icon iconName
+            Html.div [
+                prop.className "about-note-body"
+                prop.children [
+                    Html.div [ prop.className "about-note-title"; prop.text title ]
+                    Html.div [ prop.className "about-note-text"; prop.text text ]
+                ]
+            ]
+        ]
+    ]
+
+let private aboutModal (dispatch: Msg -> unit) =
+    let row (label: string) (value: string) =
+        Html.div [
+            prop.className "about-row"
+            prop.children [
+                Html.span [ prop.className "about-row-label"; prop.text label ]
+                Html.span [ prop.className "about-row-value"; prop.text value ]
+            ]
+        ]
+
+    Html.div [
+        prop.className "overlay"
+        prop.tabIndex 0
+        prop.custom ("role", "dialog")
+        prop.custom ("aria-modal", "true")
+        prop.custom ("aria-label", "About LogoCraft Studio")
+        prop.onClick (fun _ -> dispatch CloseAbout)
+        prop.onKeyDown (fun (e: Browser.Types.KeyboardEvent) ->
+            if e.key = "Escape" then dispatch CloseAbout)
+        prop.children [
+            Html.div [
+                prop.className "modal about-modal"
+                prop.custom ("data-testid", "about-modal")
+                prop.onClick (fun (e: Browser.Types.MouseEvent) -> e.stopPropagation())
+                prop.children [
+                    Html.div [
+                        prop.className "modal-header"
+                        prop.children [
+                            Html.div [
+                                prop.className "about-header"
+                                prop.children [
+                                    Html.span [ prop.className "about-mark"; prop.text "L" ]
+                                    Html.div [
+                                        prop.children [
+                                            Html.div [
+                                                prop.className "modal-title-row"
+                                                prop.children [
+                                                    Html.h2 [ prop.className "modal-title"; prop.text "LogoCraft Studio" ]
+                                                    Html.span [ prop.className "badge primary"; prop.text "Demo" ]
+                                                ]
+                                            ]
+                                            Html.p [
+                                                prop.className "modal-subtitle"
+                                                prop.text "Collaborative LOGO programming in the browser."
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                            Html.button [
+                                prop.className "icon-btn"
+                                prop.type'.button
+                                prop.title "Close"
+                                prop.onClick (fun _ -> dispatch CloseAbout)
+                                prop.children [ icon "close" ]
+                            ]
+                        ]
+                    ]
+                    Html.div [
+                        prop.className "modal-body"
+                        prop.children [
+                            aboutNote
+                                "science"
+                                "neutral"
+                                "This is a demo"
+                                "LogoCraft Studio is a prototype that explores collaborative LOGO programming. It is not a production service: expect rough edges, missing features and data loss. Do not rely on it for anything important."
+                            aboutNote
+                                "shield"
+                                "warning"
+                                "No authentication — rooms are not private"
+                                "There are no accounts, passwords or roles. Anyone who knows a room ID or invite link can read and edit the shared program and notes. Display names, colors and cursors are client-provided and can be spoofed. Do not use this app for confidential data."
+                            Html.div [ prop.className "modal-section-title"; prop.text "License & source" ]
+                            Html.div [
+                                prop.className "about-rows"
+                                prop.children [
+                                    row "License" "MIT License"
+                                    row "Copyright" "Copyright (c) 2026– by Harald Lapp"
+                                    Html.div [
+                                        prop.className "about-row"
+                                        prop.children [
+                                            Html.span [ prop.className "about-row-label"; prop.text "Source" ]
+                                            Html.a [
+                                                prop.className "about-link"
+                                                prop.href "https://github.com/aurora/logocraft"
+                                                prop.target "_blank"
+                                                prop.rel "noopener noreferrer"
+                                                prop.text "github.com/aurora/logocraft"
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                            Html.details [
+                                prop.className "about-license-details"
+                                prop.children [
+                                    Html.summary [ prop.text "Full MIT license text" ]
+                                    Html.pre [ prop.className "about-license"; prop.text mitLicenseText ]
+                                ]
+                            ]
+                        ]
+                    ]
+                    Html.div [
+                        prop.className "modal-footer"
+                        prop.children [
+                            Html.span [ prop.className "modal-footer-note"; prop.text "Provided “as is”, without warranty of any kind." ]
+                            btn "btn btn-primary btn-sm" "Close the about dialog" "about-close" CloseAbout dispatch "check" "Close"
+                        ]
+                    ]
+                ]
+            ]
+        ]
+    ]
+
 let private settingsModal (model: Model) (dispatch: Msg -> unit) =
     let tabButton (label: string) (iconName: string) (tab: SettingsTab) =
         Html.button [
@@ -2079,6 +2242,7 @@ let view (model: Model) (dispatch: Msg -> unit) =
                 ]
             ]
             if model.SettingsOpen then settingsModal model dispatch
+            if model.AboutOpen then aboutModal dispatch
             if model.NamePromptOpen then NamePromptModal model dispatch
         ]
     ]

@@ -1,0 +1,15 @@
+.git
+.gitignore
+.commandcode
+.vscode
+.vs
+**/bin
+**/obj
+**/node_modules
+src/Logo.Client/build
+src/Logo.Server/wwwroot
+tests
+ux
+docs
+*.log
+logocraft-*.json

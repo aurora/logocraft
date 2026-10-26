@@ -163,6 +163,38 @@ cd tests/e2e         && npm install && npm test           # browser, multiple ta
 #   Browser: default is Edge on Windows; otherwise set BROWSER=<path to chrome/msedge>
 ```
 
+## Deployment (Coolify)
+
+The repository contains a multi-stage `Dockerfile` that builds the Fable/Vite frontend into
+`Logo.Server/wwwroot` and publishes the ASP.NET server. Coolify deploys from Git, so commit
+and push the `Dockerfile` and `.dockerignore` first.
+
+Local check:
+
+```sh
+docker build -t logo .
+docker run --rm -p 8080:8080 logo
+# open http://localhost:8080
+```
+
+In Coolify:
+
+1. Create an **Application** from the Git repository.
+2. Build Pack: **Dockerfile**; Dockerfile Location: `/Dockerfile`; Base Directory: `/`.
+3. Exposed Port: **8080**.
+4. Environment: `ASPNETCORE_URLS=http://+:8080` and
+   `ASPNETCORE_ENVIRONMENT=Production` (the image already sets both).
+5. Health check: HTTP `GET /` on port `8080` (the static index page).
+6. Set the domain and enable HTTPS. Traefik handles the `/ws/{room}` WebSocket upgrade;
+   no extra proxy configuration is needed for the relay.
+7. Keep **one replica**. The relay keeps each room's update log in memory per process;
+   multiple replicas would split a room across instances. No database or persistent
+   volume is required.
+8. Deploy. Server restarts lose the in-memory relay state; browsers that have the room in
+   IndexedDB sync it back. Export room bundles for durable backups.
+
+The build needs network access for NuGet and npm. No server-side secrets are required.
+
 ### Relay limits
 
 The relay is hardened for demo use. All limits are per process and can be overridden with

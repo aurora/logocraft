@@ -241,6 +241,24 @@ environment variables in Coolify:
 - Serving over HTTPS and not exposing port 8080 directly is still required; the app itself
   does not terminate TLS. Keep the base images and .NET runtime patched.
 
+## Deployment (Dokploy)
+
+The same `Dockerfile` also works on [Dokploy](https://dokploy.com) without source changes.
+The settings that matter for this demo:
+
+- **Build type** `Dockerfile`, Dockerfile path `Dockerfile`, context `.` — Nixpacks/Railpack
+  do not provide the .NET 10 + Node 22 toolchain the build needs.
+- **Domain** with container port `8080`, path `/` and Let's Encrypt. Traefik upgrades
+  `/ws/{room}` automatically; no extra WebSocket configuration is needed.
+- **One replica** and no volume: the relay keeps rooms in process memory, browsers keep the
+  durable copy in IndexedDB.
+- **Memory limit** 512 MB (`536870912`, raw bytes) is enough at runtime; the Docker build
+  itself needs several GB of free RAM.
+
+A complete step-by-step tutorial — environment variables, relay limits, health checks,
+troubleshooting and auto deploy — is in
+[docs/deployment-dokploy.md](docs/deployment-dokploy.md).
+
 ## The language
 
 A practical subset of UCBLogo; case does not matter and `;` starts a comment.
